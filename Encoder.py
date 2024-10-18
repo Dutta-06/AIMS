@@ -1,7 +1,10 @@
-print("Enter file address and column to be encoded in function")
+import pandas
+import random
 
-def OneHotEncoder(path,column):
-    data = pd.read_csv(path)
+path = input("Enter file address: ")
+data = pd.read_csv(path)
+
+def OneHotEncoder(column):
     try:
         if column in data.columns:
             print("Column found!")
@@ -21,7 +24,7 @@ def OneHotEncoder(path,column):
                 EncoderList.append(1.0)
             else:
                 EncoderList.append(0.0)
-        data.insert(index,str(i),EncoderList)
+        data.insert(index,data[column][i],EncoderList)
     og_column = input("Retain original column?(y/N)")
     if og_column == 'y':
         print(data)
@@ -29,8 +32,7 @@ def OneHotEncoder(path,column):
         data.drop(column,axis = 1, inplace = True)
         print(data)
 
-def OrdinalEncoder(path,column):
-    data = pd.read_csv(path)
+def OrdinalEncoder(column):
     try:
         if column in data.columns:
             print("Column Found!")
