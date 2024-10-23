@@ -8,6 +8,7 @@ def OrdinalEncoder(column):
             print("Column cannot be encoded!")
     except:
         print("Column not found!")
+    categories = list(data[column].unique())
     RangeList = list(range(len(categories)))
     dict = {}
     for i in categories:
@@ -19,7 +20,3 @@ def OrdinalEncoder(column):
     data[column] = EncoderList
     print(data)
 	
-
-  
-  
-  
