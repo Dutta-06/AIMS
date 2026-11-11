@@ -9,6 +9,7 @@ from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
+from app.core.config import Settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
@@ -53,12 +54,27 @@ def mailer():
 
 @pytest.fixture
 def db_session():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
+    """In-memory SQLite by default; set TEST_DATABASE_URL to run the suite on Postgres.
+
+    The target database is wiped before and after each test, so point it at a throwaway one.
+    """
+    url = os.environ.get("TEST_DATABASE_URL")
+    if url:
+        engine = create_engine(
+            Settings(secret_key="x", app_password="x", database_url=url).database_url
+        )
+        Base.metadata.drop_all(engine)
+    else:
+        engine = create_engine(
+            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+        )
     Base.metadata.create_all(engine)
     with sessionmaker(engine, expire_on_commit=False)() as session:
         yield session
+    if url:
+        session.close()
+        Base.metadata.drop_all(engine)
+    engine.dispose()
 
 
 @pytest.fixture

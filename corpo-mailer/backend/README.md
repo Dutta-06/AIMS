@@ -17,6 +17,32 @@ uv run pytest
 uv run ruff check . && uv run ruff format --check .
 ```
 
+## Database
+
+SQLite by default, so it runs with zero setup. Use PostgreSQL for anything real:
+
+```bash
+docker compose up -d db                 # from the repo's corpo-mailer/ folder
+# backend/.env
+DATABASE_URL=postgresql://corpo:corpo@localhost:5432/corpo_mailer
+uv run alembic upgrade head
+```
+
+* Any `postgres://` / `postgresql://` URL works (the app switches it to the psycopg 3 driver).
+* Schema changes go through Alembic: edit `app/models/`, then
+  `uv run alembic revision --autogenerate -m "what changed"`. A test fails if the models and
+  migrations drift apart.
+* The connection pool pings before use and disables server-side prepared statements, which is
+  what hosted poolers such as Supabase's (pgbouncer, transaction mode) require. Hosted Postgres
+  usually wants `?sslmode=require` on the URL. I haven't run this against Supabase itself.
+
+Run the test suite against Postgres too (it **drops all tables** in that database, so use a
+throwaway one):
+
+```bash
+TEST_DATABASE_URL=postgresql://corpo:corpo@localhost:5432/corpo_mailer_test uv run pytest
+```
+
 ## Auth
 
 One shared password (`APP_PASSWORD`). `POST /api/v1/auth/login` with `{password, name}` returns a

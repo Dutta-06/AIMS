@@ -1,3 +1,5 @@
+import pytest
+
 """The approval gate: nothing is sent unless a human approved this exact content."""
 
 API = "/api/v1"
@@ -105,3 +107,23 @@ def test_draft_contact_must_belong_to_deal_company(client, deal_setup):
         },
     )
     assert r.status_code == 422
+
+
+def test_concurrent_sends_deliver_exactly_once(client, draft, db_session, mailer):
+    """Two people click Send at the same moment: both loaded the draft as 'approved'."""
+    from sqlalchemy.orm import sessionmaker
+
+    from app.models import Draft
+    from app.services.drafts import DraftError, send_draft
+
+    client.post(f"{API}/drafts/{draft['id']}/approve")
+    other = sessionmaker(bind=db_session.get_bind(), expire_on_commit=False)()
+    stale_a = db_session.get(Draft, draft["id"])
+    stale_b = other.get(Draft, draft["id"])
+    assert stale_a.status == stale_b.status == "approved"
+
+    send_draft(db_session, stale_a, mailer)
+    with pytest.raises(DraftError):
+        send_draft(other, stale_b, mailer)  # still believes the draft is approved
+    other.close()
+    assert len(mailer.sent) == 1

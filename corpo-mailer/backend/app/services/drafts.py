@@ -9,6 +9,7 @@ Rules (all enforced here, covered by tests/test_drafts.py):
 
 import hashlib
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.db.base import utcnow
@@ -84,9 +85,23 @@ def send_draft(db: Session, draft: Draft, mailer: Mailer) -> Draft:
         db.commit()
         raise DraftError("Draft changed since approval; review and approve it again")
 
-    # Claim the draft before touching the network so a double click cannot send twice.
-    draft.status = DraftStatus.SENDING
+    # Claim the draft atomically before touching the network. The conditional UPDATE is the
+    # lock: of two concurrent sends only one changes a row, the other sees 0 and stops. (A plain
+    # read-then-write would let both through.)
+    claimed = db.execute(
+        update(Draft)
+        .where(Draft.id == draft.id, Draft.status == DraftStatus.APPROVED)
+        .values(status=DraftStatus.SENDING)
+    ).rowcount
     db.commit()
+    db.refresh(draft)
+    if claimed != 1:
+        raise DraftError("This draft is already being sent, or was changed; reload and check")
+    # Re-check under the claim: an edit that landed between our check and the claim voids it.
+    if content_hash(contact.email, draft.subject, draft.body) != draft.approved_hash:
+        _void_approval(draft)
+        db.commit()
+        raise DraftError("Draft changed since approval; review and approve it again")
     try:
         message_id = mailer.send(to=contact.email, subject=draft.subject, body=draft.body)
     except MailError as exc:

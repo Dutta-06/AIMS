@@ -20,7 +20,8 @@ import app.models  # noqa: F401  (register tables)
 from app.core.config import get_settings
 from app.db.base import Base
 
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# configparser treats % as interpolation, and passwords in URLs may contain it.
+config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
