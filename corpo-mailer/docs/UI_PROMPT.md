@@ -335,7 +335,10 @@ A panel showing, top to bottom:
      the ring drains. On completion call `api.drafts.send`, fire the Signal pulse from the button,
      advance the rail to Sent, and play one soft success sweep across the card. Beside it, a ghost
      **Revoke approval**, and the note **Approved by {name}. Editing voids the approval.**
-     *Keyboard and assistive tech:* Enter or Space on the focused pill opens a glass confirm dialog
+     The ring must be a true pill (SVG `rx` and `ry` set to half the measured height: a single huge
+     `rx` renders an ellipse), and every dialog renders in a portal on `<body>`, or the sticky nav
+     draws over its backdrop.
+   *Keyboard and assistive tech:* Enter or Space on the focused pill opens a glass confirm dialog
      (**Send this email to Raj Mehta <raj@acme.com>?**, the subject, **Send** / **Cancel**)
      instead of the hold gesture. Under reduced motion, use the dialog for everyone.
    - *Sent* → a quiet line: **Sent 11 Nov, 6:37 pm · approved by Asha**. Fields are read-only.

@@ -157,3 +157,24 @@ html.lenis body {
     animation: none;
   }
 }
+
+/* Rotating ember border: the AI composer while it is writing. */
+@property --angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes spin-angle {
+  to {
+    --angle: 360deg;
+  }
+}
+.ember-spin {
+  background: conic-gradient(from var(--angle), #ffb347, #ff6b5e, #e6399b, #7a5cff, #ffb347);
+  animation: spin-angle 3s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ember-spin {
+    animation: none;
+  }
+}
