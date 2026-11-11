@@ -115,3 +115,37 @@ export type ImportPreview = {
   columns: Record<string, string>;
   ignored_columns: string[];
 };
+
+export type ProspectState = "new" | "accepted" | "rejected" | "snoozed";
+export type Verdict = "unverified" | "verified" | "needs_check" | "failed";
+
+export type Evidence = {
+  url: string;
+  title: string;
+  kind: string;
+  snippet: string;
+  fetched_at: string | null;
+  last_modified: string | null;
+  signal: boolean;
+};
+
+export type Prospect = {
+  id: number;
+  name: string;
+  website: string | null;
+  domain: string | null;
+  industry: string | null;
+  why: string | null;
+  state: ProspectState;
+  verdict: Verdict;
+  verdict_note: string | null;
+  checked_at: string | null;
+  expires_at: string | null;
+  snoozed_until: string | null;
+  stale: boolean;
+  evidence: Evidence[];
+  emails: { email: string; source_url: string }[];
+  linkedin_search_url: string;
+  company_id: number | null;
+  created_at: string;
+};

@@ -151,3 +151,29 @@ migrations/    Alembic
 ## Not built yet
 
 Prospect discovery, templates, CSV import.
+
+## Prospect discovery
+
+`POST /discovery/suggest` asks the models for companies similar to the ones already tracked.
+They arrive **unverified**. `POST /discovery/{id}/verify` then opens the company's own website and
+records what is really there; nothing the model says is believed until that happens.
+
+* **A prospect is `verified`** only if the site is live, the page is actually about that company,
+  and it mentions sponsorship, students, universities, campuses or hackathons, with the year not
+  stale. It is **`needs_check`** when the site is live but a person must judge (no signal found, old
+  dates, forwards to another domain, blocks bots or robots.txt) and **`failed`** when it can't be
+  confirmed (dead, not found, a different company). "Verified" never means "they will say yes".
+* **Evidence**: every page read is stored with its URL, a snippet, the date it was fetched and the
+  page's own last-modified date. Verdicts **expire** after `PROSPECT_RECHECK_DAYS` (30); a stale
+  one can't be accepted until re-checked.
+* **No model reads web pages.** Verification is plain code, so instructions hidden in a page do
+  nothing. Pages are fetched by `providers/web.py` (public http/https only, DNS-checked on every
+  redirect, size/time capped, robots.txt obeyed). Only the company's own pages are followed.
+* **Emails are never invented.** Only generic inboxes (info@, partnerships@, ...) written on the
+  company's own site are kept, each with the page it came from. People are found by opening a
+  LinkedIn people-search link in your own browser; LinkedIn is never scraped.
+* **Accept** (verified or needs_check, not stale) creates the company and leads from those public
+  inboxes (or a "General contact" lead). The model's reasoning is never copied into notes.
+  **Reject** is remembered so it isn't suggested again; **Snooze** hides it for N days.
+
+Nothing in discovery can send a message.

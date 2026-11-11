@@ -15,6 +15,7 @@ const NAV = [
   { href: "/", label: "Dashboard" },
   { href: "/leads", label: "Leads" },
   { href: "/companies", label: "Companies" },
+  { href: "/discovery", label: "Discovery" },
   { href: "/drafts", label: "Drafts" },
 ];
 
@@ -37,7 +38,7 @@ function NavLinks({ pathname, count, layoutId, className }: { pathname: string; 
             key={n.href}
             href={n.href}
             aria-current={active ? "page" : undefined}
-            className={`relative flex h-full items-center gap-1.5 rounded-full px-4 text-[0.9rem] transition-colors duration-150 ${
+            className={`relative flex h-full min-w-0 items-center gap-1 rounded-full px-4 text-[0.9rem] transition-colors duration-150 max-md:flex-1 max-md:justify-center max-md:px-1 max-md:text-[0.78rem] ${
               active ? "text-heading" : "text-body hover:text-heading"
             }`}
           >

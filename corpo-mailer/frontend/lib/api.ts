@@ -4,6 +4,8 @@ import type {
   Contact,
   Dashboard,
   Draft,
+  Prospect,
+  ProspectState,
   DraftKind,
   DraftStatus,
   ImportPreview,
@@ -108,6 +110,19 @@ export const api = {
       id: number,
       b: { type: InteractionType; channel?: Channel | null; subject?: string; content?: string },
     ) => request<Interaction>(`/contacts/${id}/interactions`, { method: "POST", ...json(b) }),
+  },
+
+  discovery: {
+    list: (state: ProspectState | "all" = "new") => request<Prospect[]>(`/discovery${qs({ state })}`),
+    suggest: (b: { count: number; focus?: string }) =>
+      request<{ added: Prospect[]; skipped_duplicates: number }>("/discovery/suggest", { method: "POST", ...json(b) }),
+    verify: (id: number, website?: string) =>
+      request<Prospect>(`/discovery/${id}/verify`, { method: "POST", ...json(website ? { website } : {}) }),
+    accept: (id: number) =>
+      request<{ company_id: number; prospect: Prospect }>(`/discovery/${id}/accept`, { method: "POST" }),
+    reject: (id: number) => request<Prospect>(`/discovery/${id}/reject`, { method: "POST" }),
+    snooze: (id: number, days = 30) =>
+      request<Prospect>(`/discovery/${id}/snooze`, { method: "POST", ...json({ days }) }),
   },
 
   drafts: {

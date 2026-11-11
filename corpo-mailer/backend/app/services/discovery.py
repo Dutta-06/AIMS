@@ -246,7 +246,11 @@ def verify(db: Session, fetcher: PageFetcher, settings: Settings, p: Prospect) -
             "Their robots.txt asks bots to stay away, so I didn't look. Check the site by hand.",
         )
     except FetchError as exc:
-        return finish(Verdict.FAILED, f"Couldn't open {p.domain}: {exc}.")
+        msg = str(exc)
+        return finish(
+            Verdict.FAILED,
+            f"{msg}." if msg.startswith("Couldn't") else f"Couldn't open {p.domain}: {msg}.",
+        )
     if home.status in (404, 410):
         return finish(
             Verdict.FAILED, f"{p.domain} returned “not found” ({home.status}); it may be gone."

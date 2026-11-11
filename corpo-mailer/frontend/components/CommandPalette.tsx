@@ -13,6 +13,7 @@ const PAGES = [
   { label: "Leads", href: "/leads" },
   { label: "Import leads", href: "/leads/import" },
   { label: "Companies", href: "/companies" },
+  { label: "Discovery", href: "/discovery" },
   { label: "Drafts", href: "/drafts" },
 ];
 

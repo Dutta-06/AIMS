@@ -18,6 +18,7 @@ npm run dev                     # http://localhost:3000
 | `/leads/[id]` | One lead: edit everything, write and approve emails, log outreach/replies on any channel, thread |
 | `/leads/import` | Import a CSV with a preview of exactly what will happen before anything is saved |
 | `/companies`, `/companies/[id]` | Companies and their people |
+| `/discovery` | Find prospects: the AI suggests lookalike companies and each is checked against its real website. Tabs: To review (grouped Verified / Needs your check / Couldn't verify), Snoozed, Rejected, Accepted. Shows the evidence seen, with dates; Accept, Re-check, Snooze, Reject |
 | `/drafts` | Every email waiting for review, plus sent history |
 
 ## Statuses and channels
