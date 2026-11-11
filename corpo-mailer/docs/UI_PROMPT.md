@@ -292,6 +292,17 @@ A horizontal board, one column per stage (`width:18rem`), scroll-snapping, with 
   the stage is saved through `api.deals.update`. If the save fails the card springs back and a toast
   explains. **Keep a keyboard and touch fallback**: each card has a "Move to…" menu listing all nine stages.
 
+- **Build notes learned the hard way (pipeline):** the board is **full-bleed** (`w-screen`, centred
+  with `left-1/2 -translate-x-1/2`, its padding aligned so the first column lines up with the page
+  title), not boxed inside the 76rem container, which hid most of the nine columns. Use
+  `@dnd-kit/core` only, with a `MouseSensor` (6px travel, so a click still follows the link) and a
+  `TouchSensor` (220ms press, so the board still scrolls sideways). Choose the drop column by
+  **pointer position** (`pointerWithin`, falling back to `rectIntersection`). Attach drag listeners
+  but not `attributes`, so the link and the Move button inside a card stay normal controls. The
+  stage picker is a portalled dialog, not a popover. Moves are optimistic and keyed by the stage
+  they started from, so the server's answer takes over once it differs. Ripple only after the save
+  succeeds, from the drop point.
+
 ## Companies (`/companies`, `/companies/[id]`)
 
 - **List**: a glass search bar and a primary **Add company** pill, then a panel of rows (company,
