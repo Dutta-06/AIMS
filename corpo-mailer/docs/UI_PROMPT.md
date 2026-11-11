@@ -314,6 +314,15 @@ A horizontal board, one column per stage (`width:18rem`), scroll-snapping, with 
   do-not-contact as a `--danger` chip, with the same toggle and remove actions); deals as linked cards.
   Deleting uses a glass confirm dialog that names what will be lost; never `window.confirm`.
 
+- **Build notes learned the hard way (companies and dialogs):** load the companies once and filter
+  as the user types, so search never shows a loading state. Every modal (sheet, confirm, stage
+  picker) shares one keyboard hook that listens on the **document**, not the panel: a button that
+  disables itself during a request drops focus to `<body>`, and a panel-level Esc handler then
+  never fires again. The hook also keeps Tab inside, closes only the topmost modal, and returns
+  focus to whatever opened it. Exit animations are a quick 200ms fade; reusing the slow entrance
+  spring made a removed card linger for over a second. Dialogs that delete things state exactly
+  what will be lost (counts), and there is no native `confirm()` anywhere.
+
 ## Deal (`/deals/[id]`): where the work happens
 
 Two columns at ≥1024px (`1fr 26rem`), stacked below.

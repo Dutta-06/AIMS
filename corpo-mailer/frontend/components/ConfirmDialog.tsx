@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { snap } from "./motion/springs";
+import { useModalKeys } from "./useModalKeys";
 import { Button } from "./ui";
 
 /**
@@ -32,21 +33,7 @@ export default function ConfirmDialog({
   const titleId = useId();
   const box = useRef<HTMLDivElement>(null);
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") return onCancel();
-    if (e.key !== "Tab") return;
-    const buttons = box.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)");
-    if (!buttons?.length) return;
-    const first = buttons[0];
-    const last = buttons[buttons.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
+  useModalKeys(box, onCancel);
 
   // Rendered at the document root: inside the page it would sit under the sticky nav, because the
   // page content forms its own stacking context. (Only ever mounted after a user action, so
@@ -65,7 +52,6 @@ export default function ConfirmDialog({
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        onKeyDown={onKeyDown}
         initial={{ opacity: 0, y: 12, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 8, scale: 0.98 }}

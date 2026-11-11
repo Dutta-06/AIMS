@@ -1,116 +1,171 @@
 "use client";
 
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useState } from "react";
+import { soft } from "@/components/motion/springs";
+import Sheet from "@/components/Sheet";
+import { useToast } from "@/components/ToastProvider";
 import { Button, Card, Empty, ErrorNote, Field, Input, Loading, PageHeader, StageBadge } from "@/components/ui";
 import { api } from "@/lib/api";
-import { useAction, useQuery } from "@/lib/hooks";
+import { errorMessage, useAction, useQuery } from "@/lib/hooks";
+
+function AddCompany({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
+  const toast = useToast();
+  const [f, setF] = useState({ name: "", industry: "", website: "", source: "" });
+  const { busy, error, run } = useAction();
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    let created = false;
+    const ok = await run(async () => {
+      const c = await api.companies.create({
+        name: f.name.trim(),
+        industry: f.industry.trim() || null,
+        website: f.website.trim() || null,
+        source: f.source.trim() || null,
+      });
+      created = true;
+      try {
+        await api.deals.create({ company_id: c.id }); // every company starts as a prospect
+      } catch (err) {
+        throw new Error(`Added ${c.name}, but couldn't start its deal (${errorMessage(err)}). Open the company to start one.`);
+      }
+    });
+    if (ok) {
+      toast(`Added ${f.name.trim()} as a prospect`);
+      onDone();
+      onClose();
+    } else if (created) {
+      onDone(); // the company exists even though the deal didn't: make it visible
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="flex flex-1 flex-col gap-4">
+      <Field label="Company name">
+        <Input value={f.name} onChange={set("name")} required autoFocus />
+      </Field>
+      <Field label="Industry">
+        <Input value={f.industry} onChange={set("industry")} placeholder="e.g. Fintech" />
+      </Field>
+      <Field label="Website">
+        <Input value={f.website} onChange={set("website")} placeholder="https://" />
+      </Field>
+      <Field label="Where did you find them?">
+        <Input value={f.source} onChange={set("source")} placeholder="e.g. HackIndia 2025 sponsor list" />
+      </Field>
+      <ErrorNote message={error} />
+      <div className="mt-auto flex gap-2 pt-4">
+        <Button type="submit" variant="primary" disabled={busy || !f.name.trim()} className="flex-1">
+          {busy ? "Adding…" : "Add as prospect"}
+        </Button>
+        <Button type="button" variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
 
 export default function CompaniesPage() {
+  const reduce = useReducedMotion();
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ name: "", industry: "", website: "", source: "" });
-  const { busy, error, run } = useAction();
-
-  const { data, error: loadError, loading, reload } = useQuery(`companies:${q}`, async () => {
-    const [companies, contacts, deals] = await Promise.all([
-      api.companies.list(q),
-      api.contacts.list(),
-      api.deals.list(),
-    ]);
+  // Everything is loaded once and filtered as you type, so searching never flashes a loading state.
+  const { data, error, loading, reload } = useQuery("companies", async () => {
+    const [companies, contacts, deals] = await Promise.all([api.companies.list(), api.contacts.list(), api.deals.list()]);
     return { companies, contacts, deals };
   });
 
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
-    const ok = await run(async () => {
-      const c = await api.companies.create({
-        name: form.name.trim(),
-        industry: form.industry.trim() || null,
-        website: form.website.trim() || null,
-        source: form.source.trim() || null,
-      });
-      await api.deals.create({ company_id: c.id }); // every company starts as a prospect
-    });
-    if (ok) {
-      setForm({ name: "", industry: "", website: "", source: "" });
-      setAdding(false);
-      reload();
-    }
-  }
+  const needle = q.trim().toLowerCase();
+  const shown = data?.companies.filter((c) => !needle || `${c.name} ${c.industry ?? ""}`.toLowerCase().includes(needle)) ?? [];
 
   return (
     <>
       <PageHeader
         title="Companies"
         subtitle="Everyone you might ask for sponsorship."
-        actions={<Button variant="primary" onClick={() => setAdding((a) => !a)}>{adding ? "Cancel" : "Add company"}</Button>}
+        actions={
+          <Button variant="primary" onClick={() => setAdding(true)}>
+            Add company
+          </Button>
+        }
       />
 
-      {adding && (
-        <form onSubmit={add} className="mb-6">
-          <Card className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Company name">
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required autoFocus />
-              </Field>
-              <Field label="Industry">
-                <Input value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} />
-              </Field>
-              <Field label="Website">
-                <Input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
-              </Field>
-              <Field label="Where did you find them?">
-                <Input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} placeholder="e.g. HackIndia 2025 sponsor list" />
-              </Field>
-            </div>
-            <ErrorNote message={error} />
-            <Button type="submit" variant="primary" disabled={busy}>{busy ? "Adding…" : "Add as prospect"}</Button>
-          </Card>
-        </form>
-      )}
-
-      <div className="mb-4 max-w-sm">
-        <Input placeholder="Search companies…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="relative mb-6 max-w-md">
+        <svg viewBox="0 0 16 16" className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-body" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true">
+          <circle cx="7" cy="7" r="4.5" />
+          <path d="M10.5 10.5L14 14" />
+        </svg>
+        <input
+          type="search"
+          aria-label="Search companies"
+          placeholder="Search companies…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          className="h-11 w-full rounded-full border border-glass-border bg-glass pl-11 pr-4 text-[0.92rem] text-heading outline-none backdrop-blur-[14px] transition-[border-color,box-shadow] duration-150 focus:border-white/30 focus:shadow-[0_0_0_4px_rgba(255,107,94,0.14)]"
+        />
       </div>
 
       {loading ? (
         <Loading />
-      ) : loadError || !data ? (
-        <ErrorNote message={loadError} />
-      ) : data.companies.length === 0 ? (
+      ) : error || !data ? (
+        <ErrorNote message={error} />
+      ) : shown.length === 0 ? (
         <Empty>{q ? "No company matches that search." : "No companies yet. Add your first prospect."}</Empty>
       ) : (
-        <Card className="overflow-x-auto p-0">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-border text-xs uppercase tracking-wide text-muted">
-              <tr>
-                <th className="px-4 py-3">Company</th>
-                <th className="px-4 py-3">Industry</th>
-                <th className="px-4 py-3">Contacts</th>
-                <th className="px-4 py-3">Stage</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {data.companies.map((c) => {
-                const deals = data.deals.filter((d) => d.company_id === c.id);
-                return (
-                  <tr key={c.id} className="hover:bg-foreground/[0.03]">
-                    <td className="px-4 py-3">
-                      <Link href={`/companies/${c.id}`} className="font-medium hover:text-accent hover:underline">{c.name}</Link>
-                    </td>
-                    <td className="px-4 py-3 text-muted">{c.industry ?? "—"}</td>
-                    <td className="px-4 py-3 text-muted">{data.contacts.filter((x) => x.company_id === c.id).length}</td>
-                    <td className="px-4 py-3">
-                      {deals.length ? <StageBadge stage={deals[0].stage} /> : <span className="text-muted">No deal</span>}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <Card className="p-2">
+          <div className="hidden grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_5rem_9rem_1.5rem] gap-4 px-4 pb-2 pt-2 text-[0.72rem] font-medium uppercase tracking-[0.08em] text-faint md:grid">
+            <span>Company</span>
+            <span>Industry</span>
+            <span>Contacts</span>
+            <span>Stage</span>
+            <span />
+          </div>
+          <ul>
+            {shown.map((c, i) => {
+              const deals = data.deals.filter((d) => d.company_id === c.id);
+              const contacts = data.contacts.filter((x) => x.company_id === c.id).length;
+              return (
+                <motion.li
+                  key={c.id}
+                  initial={reduce ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...soft, delay: Math.min(i, 20) * 0.03 }}
+                >
+                  <Link
+                    href={`/companies/${c.id}`}
+                    className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 rounded-xl px-4 py-3 transition-colors hover:bg-glass focus-visible:bg-glass focus-visible:outline-none md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_5rem_9rem_1.5rem]"
+                  >
+                    <span className="truncate font-medium text-heading">{c.name}</span>
+                    <span className="col-start-1 row-start-2 truncate text-[0.82rem] text-body md:col-start-auto md:row-start-auto md:text-[0.9rem]">
+                      {c.industry ?? "—"}
+                      <span className="md:hidden"> · {contacts} {contacts === 1 ? "contact" : "contacts"}</span>
+                    </span>
+                    <span className="hidden font-mono text-[0.9rem] tabular-nums text-body md:block">{contacts}</span>
+                    <span className="col-start-2 row-start-1 justify-self-end md:col-start-auto md:row-start-auto md:justify-self-start">
+                      {deals.length ? <StageBadge stage={deals[0].stage} /> : <span className="text-sm text-faint">No deal</span>}
+                    </span>
+                    <span aria-hidden="true" className="hidden -translate-x-1 text-faint opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 md:block">
+                      →
+                    </span>
+                  </Link>
+                </motion.li>
+              );
+            })}
+          </ul>
         </Card>
       )}
+
+      <AnimatePresence>
+        {adding && (
+          <Sheet title="Add a company" onClose={() => setAdding(false)}>
+            <AddCompany onDone={reload} onClose={() => setAdding(false)} />
+          </Sheet>
+        )}
+      </AnimatePresence>
     </>
   );
 }

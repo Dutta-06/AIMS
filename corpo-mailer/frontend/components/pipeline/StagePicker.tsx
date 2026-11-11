@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { snap } from "@/components/motion/springs";
+import { useModalKeys } from "@/components/useModalKeys";
 import { STAGE_COLOR, STAGE_LABEL } from "@/lib/format";
 import { STAGES, type Stage } from "@/lib/types";
 
@@ -25,15 +26,16 @@ export default function StagePicker({
   const titleId = useId();
   const box = useRef<HTMLDivElement>(null);
 
+  useModalKeys(box, onClose);
+
+  // Arrow keys move through the stages (Esc and Tab are handled by the shared modal hook).
   function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Escape") return onClose();
-    if (e.key !== "Tab" && e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const items = [...(box.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
     if (!items.length) return;
     e.preventDefault();
     const i = items.indexOf(document.activeElement as HTMLButtonElement);
-    const back = e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey);
-    items[(i + (back ? -1 : 1) + items.length) % items.length].focus();
+    items[(i + (e.key === "ArrowUp" ? -1 : 1) + items.length) % items.length].focus();
   }
 
   return createPortal(
