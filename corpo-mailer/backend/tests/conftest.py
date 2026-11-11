@@ -124,7 +124,7 @@ def client(db_session, mailer, llm, mailbox, imap_settings):
 
 @pytest.fixture
 def lead(client):
-    """A company with one reachable contact (name, email and an owner)."""
+    """A company with one reachable contact (name and email)."""
     company = client.post("/api/v1/companies", json={"name": "Acme"}).json()
     contact = client.post(
         "/api/v1/contacts",
@@ -133,7 +133,6 @@ def lead(client):
             "name": "Raj Mehta",
             "email": "raj@acme.com",
             "role": "DevRel",
-            "owner": "Asha",
         },
     ).json()
     return {"company": company, "contact": contact}

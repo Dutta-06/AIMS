@@ -24,9 +24,10 @@ from app.schemas.api import EMAIL_RE
 
 MAX_ROWS = 5000
 
-# header text (lower-cased) -> field. In the team's sheet NAME is the *teammate*, not the contact.
+# header text (lower-cased) -> field. Columns that name a teammate are known but not imported
+# (leads aren't assigned to people), so they are skipped without a warning.
+UNUSED = {"name", "owner", "assigned to", "assignee", "handled by", "teammate", "member"}
 ALIASES: dict[str, set[str]] = {
-    "owner": {"name", "owner", "assigned to", "assignee", "handled by", "teammate", "member"},
     "company": {"company name", "company", "organisation", "organization"},
     "person": {"point of contact", "contact person", "person", "poc", "contact name"},
     "contact": {"contact", "linkedin", "linkedin url", "profile", "link"},
@@ -82,15 +83,6 @@ def norm_linkedin(url: str) -> str:
     return u.rstrip("/").lower()
 
 
-def canonical_owner(name: str, seen: dict[str, str]) -> str:
-    """'harshit' and 'Harshit' are one person; keep one spelling (title-cased if all one case)."""
-    name = re.sub(r"\s+", " ", name).strip()
-    key = name.casefold()
-    if key not in seen:
-        seen[key] = name.title() if name in (name.lower(), name.upper()) else name
-    return seen[key]
-
-
 def _status(text: str) -> ContactStatus | None:
     return STATUS_WORDS.get(re.sub(r"[\s_\-]+", " ", text.strip().lower()))
 
@@ -100,7 +92,6 @@ def _status(text: str) -> ContactStatus | None:
 class ParsedRow:
     line: int
     company: str
-    owner: str | None = None
     name: str | None = None
     email: str | None = None
     linkedin: str | None = None
@@ -137,7 +128,7 @@ def map_headers(header: list[str]) -> tuple[dict[str, int], list[str]]:
         field_ = next((f for f, names in ALIASES.items() if key in names and f not in found), None)
         if field_:
             found[field_] = i
-        elif h.strip():
+        elif h.strip() and key not in UNUSED:
             ignored.append(h.strip())
     if "company" not in found:
         raise ImportError_("I couldn't find a company column (looked for COMPANY NAME or COMPANY)")
@@ -147,7 +138,6 @@ def map_headers(header: list[str]) -> tuple[dict[str, int], list[str]]:
 def parse_rows(text: str, infer: bool = True) -> tuple[list[ParsedRow], dict]:
     header, body = read_table(text)
     cols, ignored = map_headers(header)
-    owners: dict[str, str] = {}
     out: list[ParsedRow] = []
 
     def cell(row: list[str], f: str) -> str:
@@ -160,8 +150,6 @@ def parse_rows(text: str, infer: bool = True) -> tuple[list[ParsedRow], dict]:
             out.append(ParsedRow(n, "", skip_reason="No company on this row"))
             continue
         r = ParsedRow(n, company)
-        if cell(row, "owner"):
-            r.owner = canonical_owner(cell(row, "owner"), owners)
         r.name = cell(row, "person") or None
         r.role = cell(row, "role") or None
         r.remarks = cell(row, "remarks") or None
@@ -226,7 +214,6 @@ class _Rec:  # a contact: already in the database, or planned by an earlier row 
     email: str | None
     linkedin: str | None
     role: str | None
-    owner: str | None
     status: ContactStatus
     channels: list[str]
     remarks: str | None
@@ -240,7 +227,6 @@ class PlannedRow:
     company: str = ""
     company_new: bool = False
     name: str | None = None
-    owner: str | None = None
     status: str = "not_contacted"
     channels: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -307,7 +293,6 @@ def _merge(rec: _Rec, row: ParsedRow, overwrite: bool) -> tuple[dict, list[str]]
         ("email", "email"),
         ("linkedin", "LinkedIn"),
         ("role", "role"),
-        ("owner", "owner"),
         ("remarks", "remarks"),
     ):
         put(attr, getattr(row, attr), label)
@@ -345,7 +330,6 @@ def plan_import(db: Session, text: str, overwrite: bool = False, infer: bool = T
                 c.email,
                 c.linkedin,
                 c.role,
-                c.owner,
                 c.status,
                 list(c.channels),
                 c.remarks,
@@ -372,7 +356,6 @@ def plan_import(db: Session, text: str, overwrite: bool = False, infer: bool = T
             company=p.company,
             company_new=is_new,
             name=p.name,
-            owner=p.owner,
             status=p.status.value,
             channels=p.channels,
             warnings=list(p.warnings),
@@ -393,7 +376,6 @@ def plan_import(db: Session, text: str, overwrite: bool = False, infer: bool = T
                 p.email,
                 p.linkedin,
                 p.role,
-                p.owner,
                 p.status,
                 list(p.channels),
                 p.remarks,
@@ -406,7 +388,6 @@ def plan_import(db: Session, text: str, overwrite: bool = False, infer: bool = T
                 "email": p.email,
                 "linkedin": p.linkedin,
                 "role": p.role,
-                "owner": p.owner,
                 "status": p.status,
                 "channels": list(p.channels),
                 "remarks": p.remarks,
@@ -456,7 +437,6 @@ LABEL = {
     ContactStatus.NO_RESPONSE: "No response",
 }
 EXPORT_HEADER = [
-    "NAME",
     "COMPANY NAME",
     "POINT OF CONTACT",
     "CONTACT",
@@ -481,7 +461,6 @@ def export_csv(db: Session) -> str:
     for c in contacts:
         w.writerow(
             [
-                c.owner or "",
                 c.company.name,
                 c.name or "",
                 c.linkedin or c.email or "",

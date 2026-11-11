@@ -13,8 +13,8 @@ npm run dev                     # http://localhost:3000
 
 | Route | What it's for |
 | --- | --- |
-| `/` | Dashboard: who needs you today (unread replies, overdue follow-ups), counts by status, progress per teammate |
-| `/leads` | The tracker. **Table** (inline status, channels, owner and remarks, like the spreadsheet) or **Board** by status with drag and drop. Filters for owner, status and search; Add lead; Import CSV; Export |
+| `/` | Dashboard: who needs you today (unread replies, overdue follow-ups), counts by status |
+| `/leads` | The tracker. **Table** (inline status, channels and remarks, like the spreadsheet) or **Board** by status with drag and drop. Filters for status and search; Add lead; Import CSV; Export |
 | `/leads/[id]` | One lead: edit everything, write and approve emails, log outreach/replies on any channel, thread |
 | `/leads/import` | Import a CSV with a preview of exactly what will happen before anything is saved |
 | `/companies`, `/companies/[id]` | Companies and their people |
@@ -26,10 +26,10 @@ Four statuses (colours follow the team's sheet): **Not contacted**, **Contacted*
 **Responded** (green), **No response** (red). Once someone is contacted you pick **how**: Email,
 LinkedIn, Discord and/or Personal (multi-select).
 
-## Who's working?
+## Who's using it?
 
-There are no accounts. The pill in the nav stores a name in this browser. It powers "Mine" in
-the lead filters, becomes the default owner of new leads, and is recorded when you approve an email.
+There are no accounts and no names: leads aren't assigned to people. Approvals are recorded against
+the connected Gmail account (Gmail OAuth sign-in is planned and will supply that identity).
 
 ## Sending
 
@@ -42,7 +42,7 @@ the same rules, so these controls are the interface, not the safeguard.
 ```
 app/(app)/   all pages (wrapped by components/Shell.tsx)
 components/  Shell, DraftCard, HoldToSend, leads/ (Board, AddLead, StatusPicker), ui primitives
-lib/         api client (adds the X-Corpo-Mailer header), types, hooks, formatting, "who's working"
+lib/         api client (adds the X-Corpo-Mailer header), types, hooks, formatting
 ```
 
 `lib/` is un-ignored in `.gitignore` because the repo's root Python `.gitignore` ignores `lib/`.

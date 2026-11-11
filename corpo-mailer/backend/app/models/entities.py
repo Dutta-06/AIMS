@@ -45,9 +45,6 @@ class Contact(Base):
     email: Mapped[str | None] = mapped_column(String(320), index=True)
     linkedin: Mapped[str | None] = mapped_column(String(500))
     role: Mapped[str | None] = mapped_column(String(200))
-    owner: Mapped[str | None] = mapped_column(
-        String(100), index=True
-    )  # which teammate handles them
     status: Mapped[ContactStatus] = mapped_column(
         _enum(ContactStatus), default=ContactStatus.NOT_CONTACTED
     )

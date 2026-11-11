@@ -62,6 +62,7 @@ def test_downgrade_to_base_removes_everything(migrated_url):
 
 
 PRE_TRACKER = "9a883795116c"  # the schema before contacts became the tracked rows
+TRACKER = "d7c2e4a91f30"  # contacts are the tracked rows; owners not yet removed
 
 
 def _seed_old_schema(engine):
@@ -220,7 +221,7 @@ def test_upgrade_keeps_existing_data_and_folds_deal_state_into_contacts(migrated
     command.upgrade(cfg(), PRE_TRACKER)
     engine = create_engine(migrated_url)
     _seed_old_schema(engine)
-    command.upgrade(cfg(), "head")
+    command.upgrade(cfg(), TRACKER)  # owners still exist at this step
 
     with engine.connect() as conn:
         c = {r.id: r for r in conn.execute(text("SELECT * FROM contacts ORDER BY id"))}
@@ -311,3 +312,20 @@ def test_downgrade_one_step_restores_the_old_tables(migrated_url):
     command.downgrade(cfg(), PRE_TRACKER)
     tables = set(inspect(create_engine(migrated_url)).get_table_names())
     assert {"deals", "contacts", "drafts", "interactions"} <= tables
+
+
+def test_dropping_owners_keeps_every_contact_and_the_schema_matches_the_models(migrated_url):
+    command.upgrade(cfg(), PRE_TRACKER)
+    engine = create_engine(migrated_url)
+    _seed_old_schema(engine)
+    command.upgrade(cfg(), TRACKER)
+    with engine.connect() as conn:
+        before = conn.execute(text("SELECT id, name, status FROM contacts ORDER BY id")).all()
+    command.upgrade(cfg(), "head")
+    with engine.connect() as conn:
+        after = conn.execute(text("SELECT id, name, status FROM contacts ORDER BY id")).all()
+    assert before == after
+    assert "owner" not in {c["name"] for c in inspect(engine).get_columns("contacts")}
+    command.check(cfg())
+    command.downgrade(cfg(), TRACKER)  # and back: the column returns, empty
+    assert "owner" in {c["name"] for c in inspect(engine).get_columns("contacts")}

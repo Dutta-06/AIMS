@@ -10,7 +10,6 @@ import { Card, Empty, ErrorNote, Loading, SectionTitle, StatusBadge } from "@/co
 import { api } from "@/lib/api";
 import { STATUS_BAR, STATUS_COLOR, STATUS_LABEL, contactLabel, daysAgo, fmtDate } from "@/lib/format";
 import { useQuery } from "@/lib/hooks";
-import { useMe } from "@/lib/me";
 import { STATUSES, type Contact, type Status } from "@/lib/types";
 
 async function load() {
@@ -51,7 +50,6 @@ function LeadRow({ lead, note }: { lead: Contact; note: string }) {
             {contactLabel(lead)} <span className="font-normal text-body">· {lead.company_name}</span>
           </p>
           <p className="mt-0.5 text-xs text-body">
-            {lead.owner ? `${lead.owner} · ` : ""}
             {note}
           </p>
         </div>
@@ -68,14 +66,12 @@ function LeadRow({ lead, note }: { lead: Contact; note: string }) {
 
 export default function DashboardPage() {
   const reduce = useReducedMotion();
-  const me = useMe();
   const { data, error, loading, reload } = useQuery("dashboard", load);
   if (loading) return <Loading />;
   if (error || !data) return <ErrorNote message={error} />;
 
   const { dash, replyStatus } = data;
   const waiting = new Set([...dash.new_replies, ...dash.needs_followup].map((c) => c.id)).size;
-  const first = me.split(" ")[0];
   const headline =
     dash.total === 0
       ? "No leads yet."
@@ -88,7 +84,7 @@ export default function DashboardPage() {
     <>
       <header className="mb-10 flex flex-wrap items-end justify-between gap-6">
         <div>
-          <WordReveal as="p" text={`Good ${partOfDay()}${first ? `, ${first}` : ""}.`} stagger={40} duration={500} rise={10} className="text-[0.95rem] text-body" />
+          <WordReveal as="p" text={`Good ${partOfDay()}.`} stagger={40} duration={500} rise={10} className="text-[0.95rem] text-body" />
           <WordReveal as="h1" text={headline} accent={accent} delay={120} className="mt-2 max-w-[34rem] text-[2.4rem] font-medium leading-[1.1] tracking-[-0.02em] text-heading" />
         </div>
         <Reveal delay={300}>
@@ -144,30 +140,28 @@ export default function DashboardPage() {
             </Reveal>
 
             <Reveal delay={1000}>
-              <SectionTitle>By teammate</SectionTitle>
+              <SectionTitle>Pipeline</SectionTitle>
               <Card className="space-y-4">
-                {dash.owners.map((o, i) => (
-                  <Link key={o.owner ?? "none"} href={`/leads?owner=${encodeURIComponent(o.owner ?? "__none__")}`} className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-heading/70">
-                    <div className="mb-1.5 flex items-baseline justify-between text-sm">
-                      <span className={o.owner ? "font-medium text-heading" : "text-body"}>{o.owner ?? "Unassigned"}</span>
-                      <span className="font-mono text-xs text-body">{o.total}</span>
-                    </div>
-                    <div className="flex h-2 gap-px overflow-hidden rounded-full bg-white/[0.07]" title={STATUSES.map((s) => `${STATUS_LABEL[s]} ${o[s]}`).join(" · ")}>
-                      {STATUSES.map((s) =>
-                        o[s] === 0 ? null : (
-                          <motion.div
-                            key={s}
-                            className={`h-full origin-left ${STATUS_BAR[s]}`}
-                            style={{ width: `${(o[s] / o.total) * 100}%` }}
-                            initial={reduce ? false : { scaleX: 0 }}
-                            animate={{ scaleX: 1 }}
-                            transition={{ duration: reduce ? 0 : 0.7, delay: reduce ? 0 : 1.1 + i * 0.05, ease: [0.2, 0, 0, 1] }}
-                          />
-                        ),
-                      )}
-                    </div>
-                  </Link>
-                ))}
+                <div>
+                  <div className="mb-1.5 flex items-baseline justify-between text-sm">
+                    <span className="font-medium text-heading">Everyone</span>
+                    <span className="font-mono text-xs text-body">{dash.total}</span>
+                  </div>
+                  <div className="flex h-2 gap-px overflow-hidden rounded-full bg-white/[0.07]" title={STATUSES.map((s) => `${STATUS_LABEL[s]} ${dash.status_counts[s]}`).join(" · ")}>
+                    {STATUSES.map((s) =>
+                      dash.status_counts[s] === 0 ? null : (
+                        <motion.div
+                          key={s}
+                          className={`h-full origin-left ${STATUS_BAR[s]}`}
+                          style={{ width: `${(dash.status_counts[s] / dash.total) * 100}%` }}
+                          initial={reduce ? false : { scaleX: 0 }}
+                          animate={{ scaleX: 1 }}
+                          transition={{ duration: reduce ? 0 : 0.7, delay: reduce ? 0 : 1.1, ease: [0.2, 0, 0, 1] }}
+                        />
+                      ),
+                    )}
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-hairline pt-3 text-xs text-body">
                   {STATUSES.map((s) => (
                     <span key={s} className="flex items-center gap-1.5">

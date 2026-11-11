@@ -77,9 +77,13 @@ def edit_draft(draft_id: int, body: s.DraftUpdate, db: Session = Depends(get_db)
 
 
 @router.post("/{draft_id}/approve", response_model=s.DraftOut)
-def approve(draft_id: int, body: s.ApproveIn | None = None, db: Session = Depends(get_db)):
-    """Approve a draft. `by` records which teammate did it (there are no accounts)."""
-    who = ((body.by if body else None) or "").strip() or "Team"
+def approve(
+    draft_id: int,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """Approve a draft. It is recorded as approved by the connected Gmail account."""
+    who = settings.smtp_user or "Team"
     return _guard(svc.approve_draft, db, get_or_404(db, Draft, draft_id), who)
 
 

@@ -52,9 +52,9 @@ There are no accounts or passwords. Instead:
 * Every state-changing request must come from an allowed origin (`CORS_ORIGINS`) **and** carry an
   `X-Corpo-Mailer: 1` header. A website you happen to visit can make your browser send a bare
   `POST /drafts/1/send` to `localhost`; the missing header (and the foreign origin) get it refused.
-* There is no "who is logged in". The frontend sends the teammate's name when approving
-  (`POST /drafts/{id}/approve` with `{"by": "Asha"}`), defaulting to `Team`. Each contact has an
-  `owner` name for the lead's handler.
+* There is no "who is logged in" and leads aren't assigned to people. Approving a draft records
+  the connected Gmail account (`SMTP_USER`) as the approver; any name sent in the request is ignored.
+  (Gmail OAuth is planned to supply the identity.)
 
 ## The tracker
 
@@ -64,7 +64,6 @@ A **contact** is the row the team tracks: a person (or a generic inbox) at a com
 | --- | --- |
 | `status` | `not_contacted`, `contacted`, `responded`, `no_response` |
 | `channels` | once reached: any of `email`, `linkedin`, `discord`, `personal` (cleared if set back to not contacted) |
-| `owner` | the teammate handling them |
 | `remarks` | free notes (never quoted in AI drafts) |
 | `email` / `linkedin` | at least one of name, email or LinkedIn is required; email is optional |
 
@@ -78,7 +77,7 @@ to confirm. There is no money anywhere in the data model.
 
 `POST /import/preview` then `POST /import/commit` with `{"csv": "<file text>"}` (options:
 `overwrite`, `infer_status`); `GET /export.csv` downloads the same layout as the team's sheet
-(`NAME` is the teammate, `POINT OF CONTACT` the person, `CONTACT` a LinkedIn link or email).
+(a `NAME` column in the sheet is skipped; `POINT OF CONTACT` the person, `CONTACT` a LinkedIn link or email).
 
 * **Preview shows exactly what will happen**; commit runs the same plan.
 * **Safe to repeat.** People are matched by LinkedIn link, then email, then name within the

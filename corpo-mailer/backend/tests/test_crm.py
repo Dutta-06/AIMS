@@ -39,8 +39,8 @@ def test_email_is_optional_but_validated(client, lead):
 
 
 def test_blank_strings_become_nulls(client, lead):
-    c = make_contact(client, lead["company"]["id"], role="  ", owner="", remarks="").json()
-    assert (c["role"], c["owner"], c["remarks"]) == (None, None, None)
+    c = make_contact(client, lead["company"]["id"], role="  ", remarks="").json()
+    assert (c["role"], c["remarks"]) == (None, None)
 
 
 def test_new_contacts_start_not_contacted_with_no_channels(client, lead):
@@ -87,15 +87,13 @@ def test_cannot_blank_out_the_last_identifier(client, lead):
 def test_filters(client, lead):
     cid = lead["company"]["id"]
     other = client.post(f"{API}/companies", json={"name": "Zeta"}).json()
-    make_contact(client, cid, name="Ann", owner="Ritwik", role="CEO", remarks="met at expo").json()
+    make_contact(client, cid, name="Ann", role="CEO", remarks="met at expo").json()
     b = make_contact(client, other["id"], name="Bob").json()
     client.patch(f"{API}/contacts/{b['id']}", json={"status": "contacted", "channels": ["discord"]})
 
     def names(**p):
         return sorted(x["name"] for x in client.get(f"{API}/contacts", params=p).json())
 
-    assert names(owner="Ritwik") == ["Ann"]
-    assert names(unassigned="true") == ["Bob"]
     assert names(status="contacted") == ["Bob"]
     assert names(company_id=other["id"]) == ["Bob"]
     assert names(q="expo") == ["Ann"]  # searches remarks
@@ -175,10 +173,10 @@ def test_timeline_is_returned_oldest_first(client, lead):
 
 
 # ---- dashboard
-def test_dashboard_counts_owners_and_follow_ups(client, lead):
+def test_dashboard_counts_and_follow_ups(client, lead):
     cid = lead["company"]["id"]
     now = datetime.now(UTC)
-    quiet = make_contact(client, cid, name="Quiet", owner="Ritwik").json()
+    quiet = make_contact(client, cid, name="Quiet").json()
     log(
         client,
         quiet["id"],
@@ -186,19 +184,19 @@ def test_dashboard_counts_owners_and_follow_ups(client, lead):
         channel="email",
         occurred_at=(now - timedelta(days=30)).isoformat(),
     )
-    due = make_contact(client, cid, name="Due", owner="Ritwik").json()
+    due = make_contact(client, cid, name="Due").json()
     client.patch(
         f"{API}/contacts/{due['id']}",
         json={"status": "contacted", "next_followup_at": (now - timedelta(days=1)).isoformat()},
     )
-    fresh = make_contact(client, cid, name="Fresh", owner="Asha").json()
+    fresh = make_contact(client, cid, name="Fresh").json()
     client.patch(f"{API}/contacts/{fresh['id']}", json={"status": "contacted"})
     future = make_contact(client, cid, name="Later").json()
     client.patch(
         f"{API}/contacts/{future['id']}",
         json={"status": "contacted", "next_followup_at": (now + timedelta(days=3)).isoformat()},
     )
-    done = make_contact(client, cid, name="Done", owner="Asha").json()
+    done = make_contact(client, cid, name="Done").json()
     client.patch(
         f"{API}/contacts/{done['id']}",
         json={"status": "responded", "next_followup_at": (now - timedelta(days=1)).isoformat()},
@@ -216,13 +214,7 @@ def test_dashboard_counts_owners_and_follow_ups(client, lead):
         "Due",
         "Quiet",
     ]  # not Fresh, Later or Done
-    owners = {o["owner"]: o for o in d["owners"]}
-    assert (
-        owners["Ritwik"]["contacted"] == 2
-        and owners["Asha"]["responded"] == 1
-        and owners["Asha"]["total"] == 3
-    )
-    assert d["owners"][-1]["owner"] is None  # the unassigned group sorts last
+    assert "owners" not in d
 
 
 def test_do_not_contact_people_are_not_chased(client, lead):

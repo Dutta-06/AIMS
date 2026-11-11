@@ -9,7 +9,7 @@ from app.db.base import utcnow
 from app.db.session import get_db
 from app.models import Contact
 from app.models.enums import ContactStatus
-from app.schemas.api import DashboardOut, OwnerRow
+from app.schemas.api import DashboardOut
 
 router = APIRouter()
 
@@ -20,12 +20,8 @@ def dashboard(db: Session = Depends(get_db), settings: Settings = Depends(get_se
     contacts = db.scalars(select(Contact).options(joinedload(Contact.company))).unique().all()
 
     counts = {status: 0 for status in ContactStatus}
-    owners: dict[str | None, OwnerRow] = {}
     for c in contacts:
         counts[c.status] += 1
-        row = owners.setdefault(c.owner, OwnerRow(owner=c.owner))
-        setattr(row, c.status.value, getattr(row, c.status.value) + 1)
-        row.total += 1
 
     new_replies = (
         db.scalars(
@@ -59,7 +55,6 @@ def dashboard(db: Session = Depends(get_db), settings: Settings = Depends(get_se
     return DashboardOut(
         total=len(contacts),
         status_counts=counts,
-        owners=sorted(owners.values(), key=lambda r: (r.owner is None, (r.owner or "").lower())),
         needs_followup=needs,
         new_replies=new_replies,
     )

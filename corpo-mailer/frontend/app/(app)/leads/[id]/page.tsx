@@ -90,13 +90,12 @@ function ReplyBanner({ lead, reply, onDone }: { lead: Contact; reply?: Interacti
 
 /* ---------------------------------------------------------------- rail: lead form */
 
-function LeadForm({ lead, owners, onSaved }: { lead: Contact; owners: string[]; onSaved: () => void }) {
+function LeadForm({ lead, onSaved }: { lead: Contact; onSaved: () => void }) {
   const toast = useToast();
   const signal = useSignal();
   const [f, setF] = useState({
     name: lead.name ?? "",
     role: lead.role ?? "",
-    owner: lead.owner ?? "",
     email: lead.email ?? "",
     linkedin: lead.linkedin ?? "",
     followup: toLocalInput(lead.next_followup_at),
@@ -120,14 +119,6 @@ function LeadForm({ lead, owners, onSaved }: { lead: Contact; owners: string[]; 
           <Input value={f.role} onChange={text("role")} />
         </Field>
       </div>
-      <Field label="Owner (who's handling them)">
-        <Input value={f.owner} onChange={text("owner")} list="lead-page-owners" />
-        <datalist id="lead-page-owners">
-          {owners.map((o) => (
-            <option key={o} value={o} />
-          ))}
-        </datalist>
-      </Field>
       <Field label="LinkedIn link">
         <Input value={f.linkedin} onChange={text("linkedin")} />
       </Field>
@@ -164,7 +155,6 @@ function LeadForm({ lead, owners, onSaved }: { lead: Contact; owners: string[]; 
             api.contacts.update(lead.id, {
               name: f.name,
               role: f.role,
-              owner: f.owner,
               email: f.email,
               linkedin: f.linkedin,
               status,
@@ -335,17 +325,16 @@ export default function LeadPage() {
   const id = Number(useParams<{ id: string }>().id);
   const { data, error, loading, reload } = useQuery(`lead:${id}`, async () => {
     const lead = await api.contacts.get(id);
-    const [interactions, drafts, everyone] = await Promise.all([
+    const [interactions, drafts] = await Promise.all([
       api.contacts.interactions(id),
       api.drafts.list({ contact_id: id }),
-      api.contacts.list(),
     ]);
-    return { lead, interactions, drafts, owners: [...new Set(everyone.map((c) => c.owner).filter((o): o is string => !!o))].sort() };
+    return { lead, interactions, drafts };
   });
 
   if (loading) return <Loading />;
   if (error || !data) return <ErrorNote message={error} />;
-  const { lead, interactions, drafts, owners } = data;
+  const { lead, interactions, drafts } = data;
   const newestFirst = [...interactions].reverse();
   const latestReply = newestFirst.find((i) => i.type === "email_reply" || i.type === "reply");
 
@@ -422,7 +411,7 @@ export default function LeadPage() {
         </div>
 
         <aside data-lenis-prevent className="-m-1 space-y-5 p-1 lg:sticky lg:top-[5.5rem] lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto">
-          <LeadForm key={`${lead.updated_at}`} lead={lead} owners={owners} onSaved={reload} />
+          <LeadForm key={`${lead.updated_at}`} lead={lead} onSaved={reload} />
           <Composer lead={lead} onDone={reload} />
         </aside>
       </div>

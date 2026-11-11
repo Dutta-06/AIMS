@@ -18,7 +18,6 @@ const ACTION: Record<ImportRow["action"], { label: string; tone: "green" | "ambe
   skip: { label: "Skipped", tone: "rose" },
 };
 const FIELD_LABEL: Record<string, string> = {
-  owner: "NAME (teammate)",
   company: "COMPANY",
   person: "Contact person",
   contact: "CONTACT (LinkedIn or email)",
@@ -146,7 +145,7 @@ export default function ImportPage() {
           }}
         />
         <span className="text-[1rem] font-medium text-heading">{file ? file.name : "Choose a CSV file, or drop it here"}</span>
-        <span className="text-sm text-body">Columns I recognise: NAME (teammate), COMPANY NAME, POINT OF CONTACT, CONTACT, POSITION, STATUS, REMARKS</span>
+        <span className="text-sm text-body">Columns I recognise: COMPANY NAME, POINT OF CONTACT, CONTACT, POSITION, STATUS, REMARKS</span>
       </label>
 
       <ErrorNote message={error} />
@@ -235,7 +234,7 @@ export default function ImportPage() {
                 <table className="w-full min-w-[60rem] text-left text-sm">
                   <thead className="border-b border-hairline text-[0.72rem] uppercase tracking-[0.08em] text-faint">
                     <tr>
-                      {["Line", "Action", "Company", "Contact", "Owner", "Status", "Reached by", "Notes"].map((h) => (
+                      {["Line", "Action", "Company", "Contact", "Status", "Reached by", "Notes"].map((h) => (
                         <th key={h} className="px-3 py-3 font-medium first:pl-5 last:pr-5">
                           {h}
                         </th>
@@ -254,7 +253,6 @@ export default function ImportPage() {
                           {r.company_new && <span className="ml-2 text-xs text-ok">new</span>}
                         </td>
                         <td className="px-3 py-2.5 text-body">{r.name ?? "—"}</td>
-                        <td className="px-3 py-2.5 text-body">{r.owner ?? "—"}</td>
                         <td className="px-3 py-2.5">{r.company ? <StatusBadge status={r.status} /> : null}</td>
                         <td className="px-3 py-2.5">
                           <ChannelPills channels={r.channels} />

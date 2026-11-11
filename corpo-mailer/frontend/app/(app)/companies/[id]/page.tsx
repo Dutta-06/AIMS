@@ -11,7 +11,6 @@ import { useToast } from "@/components/ToastProvider";
 import { Button, Card, ChannelPills, Empty, ErrorNote, Field, Input, Loading, Pill, SectionTitle, StatusSelect, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
 import { contactLabel } from "@/lib/format";
-import { useMe } from "@/lib/me";
 import { useAction, useQuery } from "@/lib/hooks";
 import type { Company, Contact } from "@/lib/types";
 
@@ -98,7 +97,7 @@ function ContactCard({
           {contact.reply_unread && <Pill tone="green">New reply</Pill>}
         </p>
         <p className="mt-0.5 text-sm text-body">
-          {[contact.role, contact.owner && `owner: ${contact.owner}`].filter(Boolean).join(" · ") || "—"}
+          {contact.role || "—"}
         </p>
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.82rem] text-body">
           {contact.email && <span className="font-mono">{contact.email}</span>}
@@ -132,8 +131,7 @@ export default function CompanyPage() {
   const router = useRouter();
   const toast = useToast();
   const reduce = useReducedMotion();
-  const me = useMe();
-  const [contactForm, setContactForm] = useState({ name: "", email: "", linkedin: "", role: "", owner: "" });
+  const [contactForm, setContactForm] = useState({ name: "", email: "", linkedin: "", role: "" });
   const [confirm, setConfirm] = useState<{ kind: "company" } | { kind: "contact"; contact: Contact } | null>(null);
   const addContact = useAction();
   const rowAction = useAction();
@@ -215,12 +213,11 @@ export default function CompanyPage() {
                     email: contactForm.email,
                     linkedin: contactForm.linkedin,
                     role: contactForm.role,
-                    owner: contactForm.owner || me,
                   }),
                 );
                 if (ok) {
                   toast(`Added ${contactForm.name.trim() || contactForm.email.trim() || "the lead"}`);
-                  setContactForm({ name: "", email: "", linkedin: "", role: "", owner: "" });
+                  setContactForm({ name: "", email: "", linkedin: "", role: "" });
                   reload();
                 }
               }}
@@ -239,9 +236,6 @@ export default function CompanyPage() {
                   </Field>
                   <Field label="Email">
                     <Input type="email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} className="font-mono text-[0.85rem]" />
-                  </Field>
-                  <Field label="Owner">
-                    <Input value={contactForm.owner || me} onChange={(e) => setContactForm({ ...contactForm, owner: e.target.value })} />
                   </Field>
                 </div>
                 <ErrorNote message={addContact.error} />

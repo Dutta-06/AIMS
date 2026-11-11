@@ -62,7 +62,6 @@ function CardBody({ lead, lifted, onMove }: { lead: Contact; lifted?: boolean; o
         )}
       </div>
       <div className="flex flex-wrap items-center gap-1.5 text-[0.72rem] text-body">
-        {lead.owner && <span className="font-medium text-heading/80">{lead.owner}</span>}
         {lead.last_contacted_at && <span>· {daysAgo(lead.last_contacted_at)}d ago</span>}
       </div>
       {lead.channels.length > 0 && <ChannelPills channels={lead.channels} />}

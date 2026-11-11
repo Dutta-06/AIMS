@@ -6,12 +6,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import BrandGlyph from "@/components/BrandGlyph";
 import CommandPalette from "@/components/CommandPalette";
-import MeDialog from "@/components/MeDialog";
 import Reveal from "@/components/motion/Reveal";
 import { snap, soft } from "@/components/motion/springs";
 import { api } from "@/lib/api";
 import { useQuery } from "@/lib/hooks";
-import { useMe } from "@/lib/me";
 
 const NAV = [
   { href: "/", label: "Dashboard" },
@@ -59,11 +57,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const reduce = useReducedMotion();
   const count = useReviewCount(pathname);
-  const me = useMe();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [meOpen, setMeOpen] = useState(false);
-  const { data: people } = useQuery("shell-owners", () => api.contacts.list());
-  const owners = [...new Set((people ?? []).map((c) => c.owner).filter((o): o is string => !!o))].sort();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -103,15 +97,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           >
             ⌘K
           </button>
-          <button
-            type="button"
-            onClick={() => setMeOpen(true)}
-            aria-label={me ? `Working as ${me}. Change name` : "Set your name"}
-            className="flex h-full items-center gap-2 rounded-full px-3.5 text-[0.88rem] text-body transition-colors hover:bg-glass hover:text-heading"
-          >
-            <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${me ? "bg-ok" : "bg-faint"}`} />
-            <span className="max-w-[8rem] truncate">{me || "Who's working?"}</span>
-          </button>
         </div>
       </Reveal>
 
@@ -134,7 +119,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       />
 
       <AnimatePresence>{paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}</AnimatePresence>
-      <AnimatePresence>{meOpen && <MeDialog owners={owners} onClose={() => setMeOpen(false)} />}</AnimatePresence>
     </div>
   );
 }

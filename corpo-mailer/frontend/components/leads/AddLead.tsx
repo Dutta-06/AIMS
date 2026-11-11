@@ -6,7 +6,6 @@ import { Button, ChannelPicker, ErrorNote, Field, Input, Select, Textarea } from
 import { api } from "@/lib/api";
 import { STATUS_LABEL } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
-import { useMe } from "@/lib/me";
 import { STATUSES, type Channel, type Company, type Status } from "@/lib/types";
 
 const NEW = "__new__";
@@ -14,25 +13,21 @@ const NEW = "__new__";
 /** The form inside the "Add a lead" sheet. A lead is one person (or inbox) at a company. */
 export default function AddLead({
   companies,
-  owners,
   onDone,
   onClose,
 }: {
   companies: Company[];
-  owners: string[];
   onDone: (id: number) => void;
   onClose: () => void;
 }) {
   const toast = useToast();
-  const me = useMe();
   const [companyId, setCompanyId] = useState(companies[0] ? String(companies[0].id) : NEW);
   const [newCompany, setNewCompany] = useState("");
-  const [f, setF] = useState({ name: "", email: "", linkedin: "", role: "", owner: "", remarks: "" });
+  const [f, setF] = useState({ name: "", email: "", linkedin: "", role: "", remarks: "" });
   const [status, setStatus] = useState<Status>("not_contacted");
   const [channels, setChannels] = useState<Channel[]>([]);
   const { busy, error, run } = useAction();
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
-  const owner = f.owner || me;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -46,7 +41,6 @@ export default function AddLead({
         email: f.email,
         linkedin: f.linkedin,
         role: f.role,
-        owner,
         status,
         channels: status === "not_contacted" ? [] : channels,
         remarks: f.remarks,
@@ -93,14 +87,6 @@ export default function AddLead({
         <Input type="email" value={f.email} onChange={set("email")} className="font-mono text-[0.85rem]" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Owner (who's handling them)">
-          <Input value={owner} onChange={set("owner")} list="lead-owners" />
-          <datalist id="lead-owners">
-            {owners.map((o) => (
-              <option key={o} value={o} />
-            ))}
-          </datalist>
-        </Field>
         <Field label="Status">
           <Select value={status} onChange={(e) => setStatus(e.target.value as Status)}>
             {STATUSES.map((s) => (

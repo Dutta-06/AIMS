@@ -15,11 +15,8 @@ import { Button, Card, ChannelPicker, Empty, ErrorNote, Loading, PageHeader, Pil
 import { api, type ContactPatch } from "@/lib/api";
 import { STATUS_COLOR, STATUS_LABEL, contactLabel, daysAgo } from "@/lib/format";
 import { errorMessage, useQuery } from "@/lib/hooks";
-import { useMe } from "@/lib/me";
 import { STATUSES, type Contact, type Status } from "@/lib/types";
 
-const MINE = "__me__";
-const NONE = "__none__";
 
 /** A text cell that saves when you leave it (Enter saves, Esc puts back what was there). */
 function InlineText({
@@ -58,12 +55,10 @@ function InlineText({
 
 function Leads() {
   const params = useSearchParams();
-  const me = useMe();
   const toast = useToast();
   const signal = useSignal();
   const [view, setView] = useState<"table" | "board">("table");
   const [q, setQ] = useState("");
-  const [owner, setOwner] = useState(() => params.get("owner") ?? "");
   const [status, setStatus] = useState<Status | "">(() => {
     const s = params.get("status");
     return STATUSES.includes(s as Status) ? (s as Status) : "";
@@ -81,12 +76,8 @@ function Leads() {
   if (loading) return <Loading />;
   if (error || !data) return <ErrorNote message={error} />;
 
-  const owners = [...new Set(data.leads.map((l) => l.owner).filter((o): o is string => !!o))].sort();
   const needle = q.trim().toLowerCase();
-  const mine = owner === MINE ? me : owner;
   const matchesBase = (l: Contact) =>
-    (owner === "" ||
-      (owner === NONE ? !l.owner : (l.owner ?? "").toLowerCase() === mine.toLowerCase())) &&
     (!needle || `${contactLabel(l)} ${l.company_name} ${l.role ?? ""} ${l.remarks ?? ""} ${l.email ?? ""}`.toLowerCase().includes(needle));
   const base = data.leads.filter(matchesBase);
   const shown = status ? base.filter((l) => l.status === status) : base;
@@ -138,21 +129,6 @@ function Leads() {
           onChange={(e) => setQ(e.target.value)}
           className="h-10 w-72 max-w-full rounded-full border border-glass-border bg-glass px-4 text-[0.9rem] text-heading outline-none backdrop-blur-[14px] transition-[border-color,box-shadow] focus:border-white/30 focus:shadow-[0_0_0_4px_rgba(255,107,94,0.14)]"
         />
-        <select
-          aria-label="Filter by owner"
-          value={owner}
-          onChange={(e) => setOwner(e.target.value)}
-          className="h-10 rounded-full border border-glass-border bg-glass px-4 text-[0.9rem] text-heading outline-none backdrop-blur-[14px] [&>option]:bg-[#14121c]"
-        >
-          <option value="">Everyone</option>
-          {me && <option value={MINE}>Mine ({me})</option>}
-          {owners.filter((o) => o.toLowerCase() !== me.toLowerCase()).map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-          <option value={NONE}>Unassigned</option>
-        </select>
 
         {view === "table" && (
           <div role="group" aria-label="Filter by status" className="flex flex-wrap gap-1.5">
@@ -218,7 +194,7 @@ function Leads() {
             <table className="w-full min-w-[70rem] text-left text-sm">
               <thead className="border-b border-hairline text-[0.72rem] uppercase tracking-[0.08em] text-faint">
                 <tr>
-                  {["Owner", "Company", "Contact", "Status", "Reached by", "Remarks", "Last"].map((h) => (
+                  {["Company", "Contact", "Status", "Reached by", "Remarks", "Last"].map((h) => (
                     <th key={h} className="px-3 py-3 font-medium first:pl-5 last:pr-5">
                       {h}
                     </th>
@@ -230,10 +206,7 @@ function Leads() {
                   const busy = busyId === l.id;
                   return (
                     <tr key={l.id} className="align-middle transition-colors hover:bg-foreground/[0.03]">
-                      <td className="min-w-[8rem] py-1.5 pl-3 pr-1">
-                        <InlineText value={l.owner} placeholder="—" label={`Owner of ${contactLabel(l)}`} list="owners" onSave={(v) => patch(l, { owner: v || null })} />
-                      </td>
-                      <td className="w-[10rem] px-3 py-2">
+                      <td className="w-[10rem] py-2 pl-5 pr-3">
                         <Link href={`/companies/${l.company_id}`} className="block max-w-[9rem] truncate text-body hover:text-heading hover:underline">
                           {l.company_name}
                         </Link>
@@ -280,11 +253,6 @@ function Leads() {
               </tbody>
             </table>
           </div>
-          <datalist id="owners">
-            {owners.map((o) => (
-              <option key={o} value={o} />
-            ))}
-          </datalist>
           <p className="border-t border-hairline px-5 py-3 text-xs text-faint">
             {shown.length} of {data.leads.length} leads · edit a cell and press Enter
           </p>
@@ -294,7 +262,7 @@ function Leads() {
       <AnimatePresence>
         {adding && (
           <Sheet title="Add a lead" onClose={() => setAdding(false)}>
-            <AddLead companies={data.companies} owners={owners} onDone={() => reload()} onClose={() => setAdding(false)} />
+            <AddLead companies={data.companies} onDone={() => reload()} onClose={() => setAdding(false)} />
           </Sheet>
         )}
         {picking && (

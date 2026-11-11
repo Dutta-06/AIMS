@@ -31,7 +31,6 @@ def rows(csv_text=SHEET, **kw):
 def test_headers_are_mapped_like_the_sheet_uses_them():
     _, meta = rows()
     assert meta["columns"] == {
-        "owner": "NAME",
         "company": "COMPANY NAME",
         "person": "POINT OF CONTACT",
         "contact": "CONTACT",
@@ -39,7 +38,7 @@ def test_headers_are_mapped_like_the_sheet_uses_them():
         "status": "STATUS",
         "remarks": "REMARKS",
     }
-    assert meta["ignored_columns"] == []
+    assert meta["ignored_columns"] == []  # the teammate NAME column is skipped quietly
 
 
 def test_unrecognised_columns_are_reported_not_silently_dropped():
@@ -49,15 +48,6 @@ def test_unrecognised_columns_are_reported_not_silently_dropped():
         )
     )
     assert meta["ignored_columns"] == ["PRIORITY"]
-
-
-def test_NAME_is_the_teammate_and_owner_spelling_is_unified():
-    parsed, _ = rows()
-    assert (
-        parsed[("Orbit AI", "Ana Lopez")].owner == "Harshit"
-    )  # harshit and Harshit are one person
-    assert parsed[("Firebrand", "Ivy Chan")].owner == "Harshit"
-    assert parsed[("Palisade Networks", "Hal Verma")].owner is None  # blank owner stays unassigned
 
 
 def test_the_contact_cell_can_be_a_linkedin_link_or_an_email():
@@ -191,10 +181,9 @@ def test_commit_does_what_the_preview_said(client):
     assert len(contacts) == 11  # Globex has two people under one company
     by = {(c["company_name"], c["name"]): c for c in contacts}
     ana = by[("Orbit AI", "Ana Lopez")]
-    assert (ana["status"], ana["channels"], ana["owner"], ana["role"]) == (
+    assert (ana["status"], ana["channels"], ana["role"]) == (
         "contacted",
         ["linkedin"],
-        "Harshit",
         "Founder/CEO",
     )
     assert by[("Rivet", None)]["email"] == "opensource@rivet.example"
@@ -238,25 +227,21 @@ def test_by_default_the_sheet_never_overwrites_work_done_in_the_app(client):
     cid = next(c["id"] for c in client.get(f"{API}/contacts").json() if c["name"] == "Cara Nwosu")
     client.patch(
         f"{API}/contacts/{cid}",
-        json={"status": "responded", "remarks": "Call booked", "owner": "Mayank"},
+        json={"status": "responded", "remarks": "Call booked"},
     )
-    # the sheet still says Contacted, with no remarks and another owner
+    # the sheet still says Contacted, with no remarks
     post(client, "commit", SHEET.replace("Sidharth,Quill", "Sidharth,Quill"))
     c = client.get(f"{API}/contacts/{cid}").json()
-    assert (c["status"], c["remarks"], c["owner"]) == (
-        "responded",
-        "Call booked",
-        "Mayank",
-    )  # untouched
+    assert (c["status"], c["remarks"]) == ("responded", "Call booked")  # untouched
 
 
 def test_overwrite_mode_makes_the_sheet_authoritative(client):
     post(client, "commit")
     cid = next(c["id"] for c in client.get(f"{API}/contacts").json() if c["name"] == "Cara Nwosu")
-    client.patch(f"{API}/contacts/{cid}", json={"status": "responded", "owner": "Mayank"})
+    client.patch(f"{API}/contacts/{cid}", json={"status": "responded"})
     post(client, "commit", SHEET, overwrite=True)
     c = client.get(f"{API}/contacts/{cid}").json()
-    assert (c["status"], c["owner"]) == ("contacted", "Sidharth")
+    assert c["status"] == "contacted"
 
 
 def test_the_same_person_twice_in_one_file_is_imported_once(client):
@@ -314,12 +299,11 @@ def test_export_has_the_sheets_columns_first_and_readable_status_labels(client):
     assert "attachment" in r.headers["content-disposition"]
     lines = r.text.splitlines()
     assert (
-        lines[0]
-        == "NAME,COMPANY NAME,POINT OF CONTACT,CONTACT,POSITION,STATUS,REMARKS,EMAIL,CHANNELS"
+        lines[0] == "COMPANY NAME,POINT OF CONTACT,CONTACT,POSITION,STATUS,REMARKS,EMAIL,CHANNELS"
     )
     assert any(
         ln.startswith(
-            "Harshit,Orbit AI,Ana Lopez,https://www.linkedin.com/in/ana-lopez-123/,Founder/CEO,Contacted"
+            "Orbit AI,Ana Lopez,https://www.linkedin.com/in/ana-lopez-123/,Founder/CEO,Contacted"
         )
         for ln in lines
     )
@@ -343,5 +327,5 @@ def test_export_into_a_fresh_database_recreates_the_same_people(client, db_sessi
     by = {(c["company_name"], c["name"]): c for c in client.get(f"{API}/contacts").json()}
     assert len(by) == 11
     ana = by[("Orbit AI", "Ana Lopez")]
-    assert (ana["status"], ana["channels"], ana["owner"]) == ("contacted", ["linkedin"], "Harshit")
+    assert (ana["status"], ana["channels"]) == ("contacted", ["linkedin"])
     assert by[("Tandem AI", "Jon Ved")]["email"] == "jon.ved@tandem.example"

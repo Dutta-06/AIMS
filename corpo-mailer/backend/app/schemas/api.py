@@ -57,15 +57,14 @@ class ContactIn(BaseModel):
     email: EmailStr | None = None
     linkedin: str | None = Field(default=None, max_length=500)
     role: str | None = Field(default=None, max_length=200)
-    owner: str | None = Field(default=None, max_length=100)
     status: ContactStatus = ContactStatus.NOT_CONTACTED
     channels: list[Channel] = []
     remarks: str | None = None
     next_followup_at: datetime | None = None
 
-    _clean = field_validator(
-        "name", "email", "linkedin", "role", "owner", "remarks", mode="before"
-    )(_blank_to_none)
+    _clean = field_validator("name", "email", "linkedin", "role", "remarks", mode="before")(
+        _blank_to_none
+    )
 
     @model_validator(mode="after")
     def _identifiable(self):
@@ -80,7 +79,6 @@ class ContactUpdate(BaseModel):
     email: EmailStr | None = None
     linkedin: str | None = Field(default=None, max_length=500)
     role: str | None = Field(default=None, max_length=200)
-    owner: str | None = Field(default=None, max_length=100)
     status: ContactStatus | None = None
     channels: list[Channel] | None = None
     remarks: str | None = None
@@ -88,9 +86,9 @@ class ContactUpdate(BaseModel):
     next_followup_at: datetime | None = None
     reply_unread: bool | None = None
 
-    _clean = field_validator(
-        "name", "email", "linkedin", "role", "owner", "remarks", mode="before"
-    )(_blank_to_none)
+    _clean = field_validator("name", "email", "linkedin", "role", "remarks", mode="before")(
+        _blank_to_none
+    )
 
     @field_validator("channels")
     @classmethod
@@ -106,7 +104,6 @@ class ContactOut(ORM):
     email: str | None
     linkedin: str | None
     role: str | None
-    owner: str | None
     status: ContactStatus
     channels: list[Channel]
     remarks: str | None
@@ -158,10 +155,6 @@ class DraftUpdate(BaseModel):
     body: str | None = Field(default=None, min_length=1)
 
 
-class ApproveIn(BaseModel):
-    by: str | None = Field(default=None, max_length=100, description="Who is approving")
-
-
 class DraftOut(ORM):
     id: int
     contact_id: int
@@ -183,19 +176,9 @@ class GenerateIn(BaseModel):
 
 
 # ---- dashboard
-class OwnerRow(BaseModel):
-    owner: str | None
-    not_contacted: int = 0
-    contacted: int = 0
-    responded: int = 0
-    no_response: int = 0
-    total: int = 0
-
-
 class DashboardOut(BaseModel):
     total: int
     status_counts: dict[ContactStatus, int]
-    owners: list[OwnerRow]
     needs_followup: list[ContactOut]
     new_replies: list[ContactOut]
 

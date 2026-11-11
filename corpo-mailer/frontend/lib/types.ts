@@ -23,7 +23,6 @@ export type Contact = {
   email: string | null;
   linkedin: string | null;
   role: string | null;
-  owner: string | null;
   status: Status;
   channels: Channel[];
   remarks: string | null;
@@ -74,19 +73,9 @@ export type Draft = {
   created_at: string;
 };
 
-export type OwnerRow = {
-  owner: string | null;
-  not_contacted: number;
-  contacted: number;
-  responded: number;
-  no_response: number;
-  total: number;
-};
-
 export type Dashboard = {
   total: number;
   status_counts: Record<Status, number>;
-  owners: OwnerRow[];
   needs_followup: Contact[];
   new_replies: Contact[];
 };
@@ -112,7 +101,6 @@ export type ImportRow = {
   company: string;
   company_new: boolean;
   name: string | null;
-  owner: string | null;
   status: Status;
   channels: Channel[];
   warnings: string[];

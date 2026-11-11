@@ -1,4 +1,3 @@
-import { getMe } from "./me";
 import type {
   Channel,
   Company,
@@ -75,7 +74,6 @@ export type ContactInput = {
   email?: string | null;
   linkedin?: string | null;
   role?: string | null;
-  owner?: string | null;
   status?: Status;
   channels?: Channel[];
   remarks?: string | null;
@@ -98,7 +96,7 @@ export const api = {
   },
 
   contacts: {
-    list: (p: { company_id?: number; owner?: string; unassigned?: boolean; status?: Status; q?: string } = {}) =>
+    list: (p: { company_id?: number; status?: Status; q?: string } = {}) =>
       request<Contact[]>(`/contacts${qs(p)}`),
     get: (id: number) => request<Contact>(`/contacts/${id}`),
     create: (b: ContactInput) => request<Contact>("/contacts", { method: "POST", ...json(b) }),
@@ -120,8 +118,7 @@ export const api = {
       request<Draft>("/drafts", { method: "POST", ...json(b) }),
     edit: (id: number, b: { subject?: string; body?: string }) =>
       request<Draft>(`/drafts/${id}`, { method: "PATCH", ...json(b) }),
-    // `by` records which teammate approved it (there are no accounts).
-    approve: (id: number) => request<Draft>(`/drafts/${id}/approve`, { method: "POST", ...json({ by: getMe() || null }) }),
+    approve: (id: number) => request<Draft>(`/drafts/${id}/approve`, { method: "POST" }),
     revoke: (id: number) => request<Draft>(`/drafts/${id}/revoke`, { method: "POST" }),
     send: (id: number) => request<Draft>(`/drafts/${id}/send`, { method: "POST" }),
   },

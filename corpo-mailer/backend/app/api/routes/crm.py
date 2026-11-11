@@ -84,8 +84,6 @@ def create_contact(body: s.ContactIn, db: Session = Depends(get_db)):
 @router.get("/contacts", response_model=list[s.ContactOut])
 def list_contacts(
     company_id: int | None = None,
-    owner: str | None = None,
-    unassigned: bool = False,
     status: ContactStatus | None = None,
     q: str | None = None,
     db: Session = Depends(get_db),
@@ -98,10 +96,6 @@ def list_contacts(
     )
     if company_id is not None:
         stmt = stmt.where(Contact.company_id == company_id)
-    if unassigned:
-        stmt = stmt.where(Contact.owner.is_(None))
-    elif owner:
-        stmt = stmt.where(Contact.owner == owner)
     if status is not None:
         stmt = stmt.where(Contact.status == status)
     if q:

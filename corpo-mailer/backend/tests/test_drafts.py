@@ -15,8 +15,8 @@ def test_unapproved_draft_cannot_be_sent(client, draft, mailer):
 
 
 def test_approve_then_send(client, lead, draft, mailer):
-    approved = client.post(f"{API}/drafts/{draft['id']}/approve", json={"by": "Asha"}).json()
-    assert approved["status"] == "approved" and approved["approved_by"] == "Asha"
+    approved = client.post(f"{API}/drafts/{draft['id']}/approve").json()
+    assert approved["status"] == "approved" and approved["approved_by"] == "us@gmail.com"
 
     sent = client.post(f"{API}/drafts/{draft['id']}/send").json()
     assert sent["status"] == "sent"
@@ -29,17 +29,14 @@ def test_approve_then_send(client, lead, draft, mailer):
     assert c["last_contacted_at"] is not None
     log = client.get(f"{API}/contacts/{c['id']}/interactions").json()
     assert [(i["type"], i["channel"], i["approved_by"], i["draft_id"]) for i in log] == [
-        ("email_sent", "email", "Asha", draft["id"])
+        ("email_sent", "email", "us@gmail.com", draft["id"])
     ]
 
 
-def test_who_approved_defaults_to_team(client, draft):
-    assert client.post(f"{API}/drafts/{draft['id']}/approve").json()["approved_by"] == "Team"
-
-
-def test_blank_approver_name_also_defaults_to_team(client, draft):
-    r = client.post(f"{API}/drafts/{draft['id']}/approve", json={"by": "   "})
-    assert r.json()["approved_by"] == "Team"
+def test_approval_is_recorded_against_the_connected_gmail_account_not_a_typed_name(client, draft):
+    """A name in the request body is ignored: there is no per-person identity to claim."""
+    r = client.post(f"{API}/drafts/{draft['id']}/approve", json={"by": "Someone Else"})
+    assert r.json()["approved_by"] == "us@gmail.com"
 
 
 def test_sending_never_moves_a_responded_contact_backwards(client, lead, draft):
