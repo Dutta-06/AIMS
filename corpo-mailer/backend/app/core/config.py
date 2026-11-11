@@ -24,7 +24,12 @@ class Settings(BaseSettings):
     # are rate limited and change often, so keep this list in .env.
     openrouter_api_key: str = ""
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    llm_models: list[str] = ["meta-llama/llama-3.3-70b-instruct:free"]
+    llm_models: list[str] = [
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "google/gemma-4-31b-it:free",
+]
     llm_timeout_seconds: float = 60
 
     # What the AI is allowed to say about the event. It is told to use nothing beyond this.
