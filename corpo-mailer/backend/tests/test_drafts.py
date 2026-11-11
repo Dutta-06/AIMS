@@ -1,20 +1,22 @@
-import pytest
-
 """The approval gate: nothing is sent unless a human approved this exact content."""
+
+import pytest
 
 API = "/api/v1"
 
 
+def contact(client, id_):
+    return client.get(f"{API}/contacts/{id_}").json()
+
+
 def test_unapproved_draft_cannot_be_sent(client, draft, mailer):
-    r = client.post(f"{API}/drafts/{draft['id']}/send")
-    assert r.status_code == 409
+    assert client.post(f"{API}/drafts/{draft['id']}/send").status_code == 409
     assert mailer.sent == []
 
 
-def test_approve_then_send(client, draft, mailer, deal_setup):
-    approved = client.post(f"{API}/drafts/{draft['id']}/approve").json()
-    assert approved["status"] == "approved"
-    assert approved["approved_by"] == "Asha"
+def test_approve_then_send(client, lead, draft, mailer):
+    approved = client.post(f"{API}/drafts/{draft['id']}/approve", json={"by": "Asha"}).json()
+    assert approved["status"] == "approved" and approved["approved_by"] == "Asha"
 
     sent = client.post(f"{API}/drafts/{draft['id']}/send").json()
     assert sent["status"] == "sent"
@@ -22,29 +24,45 @@ def test_approve_then_send(client, draft, mailer, deal_setup):
         {"to": "raj@acme.com", "subject": "Sponsor brAInwave 3", "body": "Hello Raj"}
     ]
 
-    deal = client.get(f"{API}/deals/{deal_setup['deal']['id']}").json()
-    assert deal["stage"] == "contacted"
-    assert deal["last_contacted_at"] is not None
-    log = client.get(f"{API}/deals/{deal_setup['deal']['id']}/interactions").json()
-    assert [(i["type"], i["approved_by"], i["draft_id"]) for i in log] == [
-        ("email_sent", "Asha", draft["id"])
+    c = contact(client, lead["contact"]["id"])
+    assert (c["status"], c["channels"]) == ("contacted", ["email"])
+    assert c["last_contacted_at"] is not None
+    log = client.get(f"{API}/contacts/{c['id']}/interactions").json()
+    assert [(i["type"], i["channel"], i["approved_by"], i["draft_id"]) for i in log] == [
+        ("email_sent", "email", "Asha", draft["id"])
     ]
+
+
+def test_who_approved_defaults_to_team(client, draft):
+    assert client.post(f"{API}/drafts/{draft['id']}/approve").json()["approved_by"] == "Team"
+
+
+def test_blank_approver_name_also_defaults_to_team(client, draft):
+    r = client.post(f"{API}/drafts/{draft['id']}/approve", json={"by": "   "})
+    assert r.json()["approved_by"] == "Team"
+
+
+def test_sending_never_moves_a_responded_contact_backwards(client, lead, draft):
+    cid = lead["contact"]["id"]
+    client.post(f"{API}/contacts/{cid}/interactions", json={"type": "reply", "channel": "linkedin"})
+    client.post(f"{API}/drafts/{draft['id']}/approve")
+    client.post(f"{API}/drafts/{draft['id']}/send")
+    c = contact(client, cid)
+    assert c["status"] == "responded" and c["channels"] == ["linkedin", "email"]
 
 
 def test_editing_after_approval_voids_it(client, draft, mailer):
     client.post(f"{API}/drafts/{draft['id']}/approve")
     edited = client.patch(f"{API}/drafts/{draft['id']}", json={"body": "Changed text"}).json()
-    assert edited["status"] == "draft"
-    assert edited["approved_by"] is None
+    assert edited["status"] == "draft" and edited["approved_by"] is None
     assert client.post(f"{API}/drafts/{draft['id']}/send").status_code == 409
     assert mailer.sent == []
 
 
-def test_changing_recipient_email_after_approval_blocks_send(client, draft, deal_setup, mailer):
+def test_changing_recipient_email_after_approval_blocks_send(client, lead, draft, mailer):
     client.post(f"{API}/drafts/{draft['id']}/approve")
-    client.patch(f"{API}/contacts/{deal_setup['contact']['id']}", json={"email": "evil@x.com"})
-    r = client.post(f"{API}/drafts/{draft['id']}/send")
-    assert r.status_code == 409
+    client.patch(f"{API}/contacts/{lead['contact']['id']}", json={"email": "evil@x.com"})
+    assert client.post(f"{API}/drafts/{draft['id']}/send").status_code == 409
     assert mailer.sent == []
     assert client.get(f"{API}/drafts/{draft['id']}").json()["status"] == "draft"
 
@@ -56,19 +74,21 @@ def test_cannot_send_twice(client, draft, mailer):
     assert len(mailer.sent) == 1
 
 
-def test_failed_send_stays_approved_and_records_error(client, draft, mailer):
+def test_failed_send_stays_approved_and_records_error(client, lead, draft, mailer):
     client.post(f"{API}/drafts/{draft['id']}/approve")
     mailer.fail = True
     assert client.post(f"{API}/drafts/{draft['id']}/send").status_code == 409
     d = client.get(f"{API}/drafts/{draft['id']}").json()
-    assert d["status"] == "approved"
-    assert "smtp down" in d["last_error"]
+    assert d["status"] == "approved" and "smtp down" in d["last_error"]
+    assert (
+        contact(client, lead["contact"]["id"])["status"] == "not_contacted"
+    )  # a failure is not contact
     mailer.fail = False
     assert client.post(f"{API}/drafts/{draft['id']}/send").status_code == 200
 
 
-def test_do_not_contact_blocks_approval_and_send(client, draft, deal_setup, mailer):
-    cid = deal_setup["contact"]["id"]
+def test_do_not_contact_blocks_approval_and_send(client, lead, draft, mailer):
+    cid = lead["contact"]["id"]
     client.patch(f"{API}/contacts/{cid}", json={"do_not_contact": True})
     assert client.post(f"{API}/drafts/{draft['id']}/approve").status_code == 409
 
@@ -77,6 +97,31 @@ def test_do_not_contact_blocks_approval_and_send(client, draft, deal_setup, mail
     client.patch(f"{API}/contacts/{cid}", json={"do_not_contact": True})
     assert client.post(f"{API}/drafts/{draft['id']}/send").status_code == 409
     assert mailer.sent == []
+
+
+def test_a_contact_without_an_email_cannot_be_approved(client, lead, mailer):
+    linkedin_only = client.post(
+        f"{API}/contacts",
+        json={
+            "company_id": lead["company"]["id"],
+            "name": "Li",
+            "linkedin": "https://linkedin.com/in/li",
+        },
+    ).json()
+    d = client.post(
+        f"{API}/drafts", json={"contact_id": linkedin_only["id"], "subject": "s", "body": "b"}
+    ).json()
+    r = client.post(f"{API}/drafts/{d['id']}/approve")
+    assert r.status_code == 409 and "no email" in r.json()["detail"]
+    assert mailer.sent == []
+
+
+def test_removing_the_email_after_approval_blocks_send(client, lead, draft, mailer):
+    client.post(f"{API}/drafts/{draft['id']}/approve")
+    client.patch(f"{API}/contacts/{lead['contact']['id']}", json={"email": None})
+    # (an email can only be cleared by going through the API's blank-to-null rule)
+    r = client.post(f"{API}/drafts/{draft['id']}/send")
+    assert r.status_code == 409 and mailer.sent == []
 
 
 def test_revoke_returns_to_draft(client, draft):
@@ -92,21 +137,20 @@ def test_sent_draft_cannot_be_edited(client, draft):
     assert client.patch(f"{API}/drafts/{draft['id']}", json={"body": "x"}).status_code == 409
 
 
-def test_draft_contact_must_belong_to_deal_company(client, deal_setup):
-    other = client.post("/api/v1/companies", json={"name": "Other"}).json()
-    stranger = client.post(
-        "/api/v1/contacts", json={"company_id": other["id"], "name": "S", "email": "s@o.com"}
+def test_drafts_are_listed_newest_first_and_filterable(client, lead, draft):
+    second = client.post(
+        f"{API}/drafts", json={"contact_id": lead["contact"]["id"], "subject": "two", "body": "b"}
     ).json()
-    r = client.post(
-        f"{API}/drafts",
-        json={
-            "deal_id": deal_setup["deal"]["id"],
-            "contact_id": stranger["id"],
-            "subject": "s",
-            "body": "b",
-        },
-    )
-    assert r.status_code == 422
+    assert [d["id"] for d in client.get(f"{API}/drafts").json()] == [second["id"], draft["id"]]
+    client.post(f"{API}/drafts/{draft['id']}/approve")
+    assert [d["id"] for d in client.get(f"{API}/drafts", params={"status": "approved"}).json()] == [
+        draft["id"]
+    ]
+
+
+def test_deleting_a_contact_deletes_their_drafts(client, lead, draft):
+    client.delete(f"{API}/contacts/{lead['contact']['id']}")
+    assert client.get(f"{API}/drafts").json() == []
 
 
 def test_concurrent_sends_deliver_exactly_once(client, draft, db_session, mailer):

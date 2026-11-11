@@ -9,10 +9,7 @@ class Settings(BaseSettings):
 
     project_name: str = "CorpoMailer"
     api_prefix: str = "/api/v1"
-    secret_key: str
-    app_password: str
     database_url: str = "sqlite:///./corpo_mailer.db"
-    access_token_minutes: int = 60 * 12
     cors_origins: list[str] = ["http://localhost:3000"]
 
     smtp_host: str = "smtp.gmail.com"
@@ -68,10 +65,10 @@ class Settings(BaseSettings):
     )
     sender_signature: str = ""
 
-    # A deal with no contact for this many days counts as needing a follow-up.
+    # A contacted lead with no reply for this many days counts as needing a follow-up.
     stale_after_days: int = 7
 
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()  # type: ignore[call-arg]
+    return Settings()

@@ -1,25 +1,25 @@
 from enum import StrEnum
 
 
-class DealStage(StrEnum):
-    PROSPECT = "prospect"
+class ContactStatus(StrEnum):
+    NOT_CONTACTED = "not_contacted"
     CONTACTED = "contacted"
-    REPLIED = "replied"
-    IN_DISCUSSION = "in_discussion"
-    PROPOSAL_SENT = "proposal_sent"
-    COMMITTED = "committed"
-    PAID = "paid"
-    DECLINED = "declined"
+    RESPONDED = "responded"
     NO_RESPONSE = "no_response"
 
 
-# Stages where outreach is finished, so the deal never shows up as needing follow-up.
-CLOSED_STAGES = frozenset({DealStage.PAID, DealStage.DECLINED, DealStage.NO_RESPONSE})
+class Channel(StrEnum):
+    EMAIL = "email"
+    LINKEDIN = "linkedin"
+    DISCORD = "discord"
+    PERSONAL = "personal"
 
 
 class InteractionType(StrEnum):
     EMAIL_SENT = "email_sent"
     EMAIL_REPLY = "email_reply"
+    OUTREACH = "outreach"  # we reached out on `channel` (LinkedIn, Discord, in person)
+    REPLY = "reply"  # they answered on `channel`
     CALL = "call"
     MEETING = "meeting"
     NOTE = "note"

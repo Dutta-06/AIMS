@@ -4,9 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_or_404
 from app.core.config import Settings, get_settings
-from app.core.security import current_operator
 from app.db.session import get_db
-from app.models import Contact, Deal, Draft
+from app.models import Contact, Draft
 from app.models.enums import DraftStatus
 from app.providers.llm import LLM, get_llm
 from app.providers.mail import Mailer, get_mailer
@@ -26,10 +25,7 @@ def _guard(fn, *args):
 
 @router.post("", response_model=s.DraftOut, status_code=201)
 def create_draft(body: s.DraftIn, db: Session = Depends(get_db)):
-    deal = get_or_404(db, Deal, body.deal_id)
-    contact = get_or_404(db, Contact, body.contact_id)
-    if contact.company_id != deal.company_id:
-        raise HTTPException(422, "Contact does not belong to this deal's company")
+    get_or_404(db, Contact, body.contact_id)
     draft = Draft(**body.model_dump())
     db.add(draft)
     db.commit()
@@ -44,29 +40,28 @@ def generate(
     settings: Settings = Depends(get_settings),
 ):
     """Ask the AI for a draft. It lands as an unapproved draft; sending still needs approval."""
-    deal = get_or_404(db, Deal, body.deal_id)
     contact = get_or_404(db, Contact, body.contact_id)
-    if contact.company_id != deal.company_id:
-        raise HTTPException(422, "Contact does not belong to this deal's company")
     if contact.do_not_contact:
         raise HTTPException(409, "This contact is marked do-not-contact")
+    if not contact.email:
+        raise HTTPException(409, "This contact has no email address yet; add one first")
     try:
-        return drafting.generate_draft(
-            db, llm, settings, deal, contact, body.kind, body.instructions
-        )
+        return drafting.generate_draft(db, llm, settings, contact, body.kind, body.instructions)
     except drafting.GenerationError as exc:
         raise HTTPException(502, str(exc)) from None
 
 
 @router.get("", response_model=list[s.DraftOut])
 def list_drafts(
-    status: DraftStatus | None = None, deal_id: int | None = None, db: Session = Depends(get_db)
+    status: DraftStatus | None = None,
+    contact_id: int | None = None,
+    db: Session = Depends(get_db),
 ):
-    stmt = select(Draft).order_by(Draft.created_at.desc())
+    stmt = select(Draft).order_by(Draft.created_at.desc(), Draft.id.desc())
     if status is not None:
         stmt = stmt.where(Draft.status == status)
-    if deal_id is not None:
-        stmt = stmt.where(Draft.deal_id == deal_id)
+    if contact_id is not None:
+        stmt = stmt.where(Draft.contact_id == contact_id)
     return db.scalars(stmt).all()
 
 
@@ -82,10 +77,10 @@ def edit_draft(draft_id: int, body: s.DraftUpdate, db: Session = Depends(get_db)
 
 
 @router.post("/{draft_id}/approve", response_model=s.DraftOut)
-def approve(
-    draft_id: int, db: Session = Depends(get_db), operator: str = Depends(current_operator)
-):
-    return _guard(svc.approve_draft, db, get_or_404(db, Draft, draft_id), operator)
+def approve(draft_id: int, body: s.ApproveIn | None = None, db: Session = Depends(get_db)):
+    """Approve a draft. `by` records which teammate did it (there are no accounts)."""
+    who = ((body.by if body else None) or "").strip() or "Team"
+    return _guard(svc.approve_draft, db, get_or_404(db, Draft, draft_id), who)
 
 
 @router.post("/{draft_id}/revoke", response_model=s.DraftOut)

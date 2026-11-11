@@ -1,11 +1,17 @@
 from datetime import datetime
 
+from sqlalchemy import JSON, ForeignKey, String, Text, false
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, Integer, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, UTCDateTime, utcnow
-from app.models.enums import DealStage, DraftStatus, InteractionSource, InteractionType
+from app.models.enums import (
+    Channel,
+    ContactStatus,
+    DraftStatus,
+    InteractionSource,
+    InteractionType,
+)
 
 
 def _enum(e):
@@ -24,58 +30,57 @@ class Company(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     contacts: Mapped[list["Contact"]] = relationship(
-        back_populates="company", cascade="all, delete-orphan"
-    )
-    deals: Mapped[list["Deal"]] = relationship(
-        back_populates="company", cascade="all, delete-orphan"
+        back_populates="company", cascade="all, delete-orphan", order_by="Contact.name"
     )
 
 
 class Contact(Base):
+    """One person (or one generic inbox) at a company: the row the team tracks outreach on."""
+
     __tablename__ = "contacts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"))
-    name: Mapped[str] = mapped_column(String(200))
-    email: Mapped[str] = mapped_column(String(320), index=True)
+    name: Mapped[str | None] = mapped_column(String(200))
+    email: Mapped[str | None] = mapped_column(String(320), index=True)
+    linkedin: Mapped[str | None] = mapped_column(String(500))
     role: Mapped[str | None] = mapped_column(String(200))
-    linkedin: Mapped[str | None] = mapped_column(String(300))
+    owner: Mapped[str | None] = mapped_column(
+        String(100), index=True
+    )  # which teammate handles them
+    status: Mapped[ContactStatus] = mapped_column(
+        _enum(ContactStatus), default=ContactStatus.NOT_CONTACTED
+    )
+    # How we have reached them, once we have. Empty while status is not_contacted.
+    channels: Mapped[list[str]] = mapped_column(JSON, default=list)
+    remarks: Mapped[str | None] = mapped_column(Text)
     # Never mail a contact who bounced or asked us to stop.
-    do_not_contact: Mapped[bool] = mapped_column(default=False)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
-
-    company: Mapped[Company] = relationship(back_populates="contacts")
-
-
-class Deal(Base):
-    __tablename__ = "deals"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"))
-    stage: Mapped[DealStage] = mapped_column(_enum(DealStage), default=DealStage.PROSPECT)
-    owner: Mapped[str | None] = mapped_column(String(100))
-    target_amount: Mapped[int | None] = mapped_column(Integer)
-    committed_amount: Mapped[int | None] = mapped_column(Integer)
-    next_followup_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    do_not_contact: Mapped[bool] = mapped_column(default=False, server_default=false())
     last_contacted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
-    notes: Mapped[str | None] = mapped_column(Text)
+    next_followup_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     # Set when the reply tracker logs a new reply; cleared by a person marking it seen.
     reply_unread: Mapped[bool] = mapped_column(default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
 
-    company: Mapped[Company] = relationship(back_populates="deals")
+    company: Mapped[Company] = relationship(back_populates="contacts")
     interactions: Mapped[list["Interaction"]] = relationship(
-        back_populates="deal", cascade="all, delete-orphan", order_by="Interaction.occurred_at"
+        back_populates="contact", cascade="all, delete-orphan", order_by="Interaction.occurred_at"
     )
+    drafts: Mapped[list["Draft"]] = relationship(cascade="all, delete-orphan")
+
+    @property
+    def company_name(self) -> str:
+        return self.company.name
 
 
 class Interaction(Base):
     __tablename__ = "interactions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    deal_id: Mapped[int] = mapped_column(ForeignKey("deals.id", ondelete="CASCADE"))
-    contact_id: Mapped[int | None] = mapped_column(ForeignKey("contacts.id", ondelete="SET NULL"))
+    contact_id: Mapped[int] = mapped_column(ForeignKey("contacts.id", ondelete="CASCADE"))
     type: Mapped[InteractionType] = mapped_column(_enum(InteractionType))
+    channel: Mapped[Channel | None] = mapped_column(_enum(Channel))
     source: Mapped[InteractionSource] = mapped_column(
         _enum(InteractionSource), default=InteractionSource.MANUAL
     )
@@ -88,7 +93,7 @@ class Interaction(Base):
     approved_by: Mapped[str | None] = mapped_column(String(100))
     occurred_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
-    deal: Mapped[Deal] = relationship(back_populates="interactions")
+    contact: Mapped[Contact] = relationship(back_populates="interactions")
 
 
 class Draft(Base):
@@ -97,7 +102,6 @@ class Draft(Base):
     __tablename__ = "drafts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    deal_id: Mapped[int] = mapped_column(ForeignKey("deals.id", ondelete="CASCADE"))
     contact_id: Mapped[int] = mapped_column(ForeignKey("contacts.id", ondelete="CASCADE"))
     subject: Mapped[str] = mapped_column(String(500))
     body: Mapped[str] = mapped_column(Text)
@@ -118,7 +122,7 @@ class MailboxState(Base):
     __tablename__ = "mailbox_state"
 
     folder: Mapped[str] = mapped_column(String(200), primary_key=True)
-    uidvalidity: Mapped[int | None] = mapped_column(Integer)
-    last_uid: Mapped[int] = mapped_column(Integer, default=0)
+    uidvalidity: Mapped[int | None] = mapped_column()
+    last_uid: Mapped[int] = mapped_column(default=0)
     last_sync_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     last_error: Mapped[str | None] = mapped_column(Text)

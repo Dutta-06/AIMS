@@ -25,9 +25,7 @@ def server(monkeypatch):
 
 
 def reader(password="app-pw"):
-    return IMAPMailboxReader(
-        Settings(secret_key="k", app_password="p", smtp_user="us@gmail.com", smtp_password=password)
-    )
+    return IMAPMailboxReader(Settings(smtp_user="us@gmail.com", smtp_password=password))
 
 
 def test_first_run_searches_by_date_and_parses_everything(server):
@@ -77,6 +75,6 @@ def test_unreachable_server_raises_mailbox_error(monkeypatch):
 
 
 def test_missing_credentials_are_reported():
-    r = IMAPMailboxReader(Settings(secret_key="k", app_password="p"))
+    r = IMAPMailboxReader(Settings())
     with pytest.raises(MailboxError, match="not configured"):
         r.fetch(uidvalidity=None, last_uid=0, lookback_days=14)

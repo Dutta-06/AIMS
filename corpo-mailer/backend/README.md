@@ -1,12 +1,12 @@
 # Corpo Mailer: backend
 
-Sponsorship outreach CRM for brAInwave. It tracks companies, contacts and deals through a
-pipeline, drafts outreach emails, and sends them, **only after a human approves each one**.
+Outreach tracker for brAInwave sponsorship. It tracks who the team has contacted, on which channel
+and with what result; drafts outreach emails; and sends them, **only after a human approves each one**.
 
 ## Run
 
 ```bash
-cp .env.example .env        # set SECRET_KEY, APP_PASSWORD, SMTP_*
+cp .env.example .env        # set SMTP_* (and the rest as needed)
 uv sync
 uv run alembic upgrade head
 uv run python main.py       # http://localhost:8000/docs
@@ -43,10 +43,51 @@ throwaway one):
 TEST_DATABASE_URL=postgresql://corpo:corpo@localhost:5432/corpo_mailer_test uv run pytest
 ```
 
-## Auth
+## No login
 
-One shared password (`APP_PASSWORD`). `POST /api/v1/auth/login` with `{password, name}` returns a
-bearer token; `name` is recorded as the approver on every email sent. There are no roles.
+There are no accounts or passwords. Instead:
+
+* The backend listens on **127.0.0.1 only** (`main.py`). Don't expose it to a network or the
+  internet: anyone who can reach it can approve and send email from your Gmail account.
+* Every state-changing request must come from an allowed origin (`CORS_ORIGINS`) **and** carry an
+  `X-Corpo-Mailer: 1` header. A website you happen to visit can make your browser send a bare
+  `POST /drafts/1/send` to `localhost`; the missing header (and the foreign origin) get it refused.
+* There is no "who is logged in". The frontend sends the teammate's name when approving
+  (`POST /drafts/{id}/approve` with `{"by": "Asha"}`), defaulting to `Team`. Each contact has an
+  `owner` name for the lead's handler.
+
+## The tracker
+
+A **contact** is the row the team tracks: a person (or a generic inbox) at a company.
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `not_contacted`, `contacted`, `responded`, `no_response` |
+| `channels` | once reached: any of `email`, `linkedin`, `discord`, `personal` (cleared if set back to not contacted) |
+| `owner` | the teammate handling them |
+| `remarks` | free notes (never quoted in AI drafts) |
+| `email` / `linkedin` | at least one of name, email or LinkedIn is required; email is optional |
+
+Reaching out or hearing back updates status and channels through one set of rules
+(`app/services/contacts.py`): sending an approved email, or logging an outreach, marks the contact
+`contacted` on that channel; logging a reply marks `responded`; nothing ever moves a lead
+backwards. A reply *detected* by the mailbox watcher only flags the contact "unread" for a person
+to confirm. There is no money anywhere in the data model.
+
+## CSV import and export
+
+`POST /import/preview` then `POST /import/commit` with `{"csv": "<file text>"}` (options:
+`overwrite`, `infer_status`); `GET /export.csv` downloads the same layout as the team's sheet
+(`NAME` is the teammate, `POINT OF CONTACT` the person, `CONTACT` a LinkedIn link or email).
+
+* **Preview shows exactly what will happen**; commit runs the same plan.
+* **Safe to repeat.** People are matched by LinkedIn link, then email, then name within the
+  company, and updated instead of duplicated. By default an import only fills blanks and moves a
+  status forward; it never overwrites what someone typed in the app. `overwrite` makes the sheet win.
+* **Guesses are flagged on the row:** a status inferred from remarks ("mail sent" with a blank
+  status), an email lifted out of remarks, an unknown status word, an unreadable contact cell.
+  Weak hints ("also Discord", "Mail: someone@x.com") are never treated as outreach.
+* Exporting and re-importing is a no-op.
 
 ## The send rule
 
@@ -61,7 +102,7 @@ Email can only leave through `app/services/drafts.py::send_draft`.
 
 ## AI drafting
 
-`POST /api/v1/drafts/generate` `{deal_id, contact_id, kind: intro|followup|thank_you, instructions?}`
+`POST /api/v1/drafts/generate` `{contact_id, kind: intro|followup|thank_you, instructions?}`
 asks an LLM (OpenRouter, OpenAI-compatible) for a draft and stores it as an **unapproved** draft.
 Set `OPENROUTER_API_KEY`, `LLM_MODELS` (requests rotate round-robin across them, and a failing or
 rate-limited model falls through to the next) and `EVENT_PITCH` in `.env`. The prompt tells the model to use only the facts you
@@ -79,12 +120,12 @@ For each new message:
 
 | It is | What happens |
 | --- | --- |
-| A reply to an email we sent | Logged on that deal as an `email_reply` (auto-detected) and the deal is flagged **unread**. The stage is **not** changed; a person decides. |
-| A bounce | Noted on the deal. A permanent failure (5.x.x) marks the contact do-not-contact so we stop mailing a dead address. |
+| A reply to an email we sent | Logged on that contact's timeline as an `email_reply` (auto-detected) and the contact is flagged **unread**. The status is **not** changed; a person confirms "Responded". |
+| A bounce | Noted on the contact's timeline. A permanent failure (5.x.x) marks the contact do-not-contact so we stop mailing a dead address. |
 | An out-of-office / auto-reply, or mail from our own address | Ignored |
 | Mail from anyone we haven't emailed | Left alone |
 
-**Matching.** A reply is tied to its deal by the `In-Reply-To`/`References` headers against the
+**Matching.** A reply is tied to its contact by the `In-Reply-To`/`References` headers against the
 Message-ID we stored when sending. If that fails (some providers rewrite the Message-ID on SMTP),
 it falls back to "the sender is a contact we've emailed", and says so in the log entry. Bounces
 are matched by the failed recipient address, not by Message-ID.
@@ -98,11 +139,11 @@ IMAP protocol; they have **not** been run against Gmail itself.
 
 ```
 app/
-  core/        settings, auth
+  core/        settings, request guard (no login)
   db/          engine/session, base + UTC datetime type
-  models/      SQLAlchemy tables (company, contact, deal, interaction, draft)
+  models/      SQLAlchemy tables (company, contact, interaction, draft)
   schemas/     request/response models
-  services/    business rules (approval gate)
+  services/    business rules (approval gate, outreach rules, CSV import, reply sync)
   providers/   outside world (SMTP mailer, OpenRouter LLM, IMAP reader)
   api/routes/  thin HTTP layer
 migrations/    Alembic

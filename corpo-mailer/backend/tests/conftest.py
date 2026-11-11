@@ -1,21 +1,27 @@
 import os
 
-os.environ.setdefault("SECRET_KEY", "test-secret-key-that-is-long-enough-for-hs256")
-os.environ.setdefault("APP_PASSWORD", "hunter2")
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
-from sqlalchemy.pool import StaticPool  # noqa: E402
+from app.core.config import Settings, get_settings
+from app.db.base import Base
+from app.db.session import get_db
+from app.main import app
+from app.providers.imap import Fetched, MailboxError, get_mailbox
+from app.providers.llm import LLM, LLMError, get_llm
+from app.providers.mail import MailError, get_mailer
 
-from app.core.config import Settings, get_settings  # noqa: E402
-from app.db.base import Base  # noqa: E402
-from app.db.session import get_db  # noqa: E402
-from app.main import app  # noqa: E402
-from app.providers.imap import Fetched, MailboxError, get_mailbox  # noqa: E402
-from app.providers.llm import LLM, LLMError, get_llm  # noqa: E402
-from app.providers.mail import MailError, get_mailer  # noqa: E402
+
+@pytest.fixture(autouse=True)
+def _hermetic_settings(monkeypatch):
+    """Never read a developer's real .env while testing."""
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 class FakeMailer:
@@ -61,18 +67,8 @@ class FakeMailbox:
 
 
 @pytest.fixture
-def mailbox():
-    return FakeMailbox()
-
-
-@pytest.fixture
-def imap_settings():
-    return Settings(
-        secret_key=os.environ["SECRET_KEY"],
-        app_password=os.environ["APP_PASSWORD"],
-        smtp_user="us@gmail.com",
-        smtp_password="app-pw",
-    )
+def mailer():
+    return FakeMailer()
 
 
 @pytest.fixture
@@ -81,8 +77,13 @@ def llm():
 
 
 @pytest.fixture
-def mailer():
-    return FakeMailer()
+def mailbox():
+    return FakeMailbox()
+
+
+@pytest.fixture
+def imap_settings():
+    return Settings(smtp_user="us@gmail.com", smtp_password="app-pw")
 
 
 @pytest.fixture
@@ -93,9 +94,7 @@ def db_session():
     """
     url = os.environ.get("TEST_DATABASE_URL")
     if url:
-        engine = create_engine(
-            Settings(secret_key="x", app_password="x", database_url=url).database_url
-        )
+        engine = create_engine(Settings(database_url=url).database_url)
         Base.metadata.drop_all(engine)
     else:
         engine = create_engine(
@@ -118,31 +117,34 @@ def client(db_session, mailer, llm, mailbox, imap_settings):
     app.dependency_overrides[get_mailbox] = lambda: mailbox
     app.dependency_overrides[get_settings] = lambda: imap_settings
     with TestClient(app) as c:
-        token = c.post("/api/v1/auth/login", json={"password": "hunter2", "name": "Asha"}).json()
-        c.headers["Authorization"] = f"Bearer {token['access_token']}"
+        c.headers["X-Corpo-Mailer"] = "1"  # what the real frontend sends on every request
         yield c
     app.dependency_overrides.clear()
 
 
 @pytest.fixture
-def deal_setup(client):
-    """A company with one contact and one deal."""
+def lead(client):
+    """A company with one reachable contact (name, email and an owner)."""
     company = client.post("/api/v1/companies", json={"name": "Acme"}).json()
     contact = client.post(
         "/api/v1/contacts",
-        json={"company_id": company["id"], "name": "Raj", "email": "raj@acme.com"},
+        json={
+            "company_id": company["id"],
+            "name": "Raj Mehta",
+            "email": "raj@acme.com",
+            "role": "DevRel",
+            "owner": "Asha",
+        },
     ).json()
-    deal = client.post("/api/v1/deals", json={"company_id": company["id"]}).json()
-    return {"company": company, "contact": contact, "deal": deal}
+    return {"company": company, "contact": contact}
 
 
 @pytest.fixture
-def draft(client, deal_setup):
+def draft(client, lead):
     r = client.post(
         "/api/v1/drafts",
         json={
-            "deal_id": deal_setup["deal"]["id"],
-            "contact_id": deal_setup["contact"]["id"],
+            "contact_id": lead["contact"]["id"],
             "subject": "Sponsor brAInwave 3",
             "body": "Hello Raj",
         },

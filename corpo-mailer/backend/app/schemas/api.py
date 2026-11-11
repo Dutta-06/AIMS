@@ -1,8 +1,15 @@
+import re
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from app.models.enums import DealStage, DraftStatus, InteractionSource, InteractionType
+from app.models.enums import (
+    Channel,
+    ContactStatus,
+    DraftStatus,
+    InteractionSource,
+    InteractionType,
+)
 from app.services.drafting import DraftKind
 
 
@@ -10,14 +17,15 @@ class ORM(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class LoginIn(BaseModel):
-    password: str
-    name: str = Field(min_length=1, max_length=100, description="Shown as the approver on sends")
+def _blank_to_none(v):
+    if isinstance(v, str):
+        v = v.strip()
+        return v or None
+    return v
 
 
-class TokenOut(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+def _dedupe(channels: list[Channel]) -> list[Channel]:
+    return list(dict.fromkeys(channels))
 
 
 # ---- companies
@@ -42,82 +50,94 @@ class CompanyOut(ORM, CompanyIn):
     created_at: datetime
 
 
-# ---- contacts
+# ---- contacts (the rows the team tracks)
 class ContactIn(BaseModel):
     company_id: int
-    name: str = Field(min_length=1, max_length=200)
-    email: EmailStr
-    role: str | None = None
-    linkedin: str | None = None
+    name: str | None = Field(default=None, max_length=200)
+    email: EmailStr | None = None
+    linkedin: str | None = Field(default=None, max_length=500)
+    role: str | None = Field(default=None, max_length=200)
+    owner: str | None = Field(default=None, max_length=100)
+    status: ContactStatus = ContactStatus.NOT_CONTACTED
+    channels: list[Channel] = []
+    remarks: str | None = None
+    next_followup_at: datetime | None = None
+
+    _clean = field_validator(
+        "name", "email", "linkedin", "role", "owner", "remarks", mode="before"
+    )(_blank_to_none)
+
+    @model_validator(mode="after")
+    def _identifiable(self):
+        if not (self.name or self.email or self.linkedin):
+            raise ValueError("Give the contact a name, an email or a LinkedIn link")
+        self.channels = _dedupe(self.channels)
+        return self
 
 
 class ContactUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: str | None = Field(default=None, max_length=200)
     email: EmailStr | None = None
-    role: str | None = None
-    linkedin: str | None = None
+    linkedin: str | None = Field(default=None, max_length=500)
+    role: str | None = Field(default=None, max_length=200)
+    owner: str | None = Field(default=None, max_length=100)
+    status: ContactStatus | None = None
+    channels: list[Channel] | None = None
+    remarks: str | None = None
     do_not_contact: bool | None = None
+    next_followup_at: datetime | None = None
+    reply_unread: bool | None = None
+
+    _clean = field_validator(
+        "name", "email", "linkedin", "role", "owner", "remarks", mode="before"
+    )(_blank_to_none)
+
+    @field_validator("channels")
+    @classmethod
+    def _dedupe_channels(cls, v):
+        return _dedupe(v) if v is not None else v
 
 
 class ContactOut(ORM):
     id: int
     company_id: int
-    name: str
-    email: EmailStr
-    role: str | None
+    company_name: str
+    name: str | None
+    email: str | None
     linkedin: str | None
-    do_not_contact: bool
-    created_at: datetime
-
-
-# ---- deals
-class DealIn(BaseModel):
-    company_id: int
-    stage: DealStage = DealStage.PROSPECT
-    owner: str | None = None
-    target_amount: int | None = Field(default=None, ge=0)
-    next_followup_at: datetime | None = None
-    notes: str | None = None
-
-
-class DealUpdate(BaseModel):
-    stage: DealStage | None = None
-    owner: str | None = None
-    target_amount: int | None = Field(default=None, ge=0)
-    committed_amount: int | None = Field(default=None, ge=0)
-    next_followup_at: datetime | None = None
-    notes: str | None = None
-    reply_unread: bool | None = None
-
-
-class DealOut(ORM):
-    id: int
-    company_id: int
-    stage: DealStage
+    role: str | None
     owner: str | None
-    target_amount: int | None
-    committed_amount: int | None
-    next_followup_at: datetime | None
+    status: ContactStatus
+    channels: list[Channel]
+    remarks: str | None
+    do_not_contact: bool
     last_contacted_at: datetime | None
-    notes: str | None
+    next_followup_at: datetime | None
     reply_unread: bool
     created_at: datetime
+    updated_at: datetime
 
 
-# ---- interactions (manual logging; sends are logged by the send service)
+# ---- interactions (manual logging; sent emails are logged by the send gate)
 class InteractionIn(BaseModel):
     type: InteractionType
-    contact_id: int | None = None
+    channel: Channel | None = None
     subject: str | None = None
     content: str | None = None
     occurred_at: datetime | None = None
 
+    @model_validator(mode="after")
+    def _channel_rules(self):
+        if self.type in (InteractionType.OUTREACH, InteractionType.REPLY) and self.channel is None:
+            raise ValueError("Say which channel (email, linkedin, discord or personal)")
+        return self
+
 
 class InteractionOut(ORM):
     id: int
-    deal_id: int
-    contact_id: int | None
+    contact_id: int
     type: InteractionType
+    channel: Channel | None
     source: InteractionSource
     subject: str | None
     content: str | None
@@ -128,7 +148,6 @@ class InteractionOut(ORM):
 
 # ---- drafts
 class DraftIn(BaseModel):
-    deal_id: int
     contact_id: int
     subject: str = Field(min_length=1, max_length=500)
     body: str = Field(min_length=1)
@@ -139,9 +158,12 @@ class DraftUpdate(BaseModel):
     body: str | None = Field(default=None, min_length=1)
 
 
+class ApproveIn(BaseModel):
+    by: str | None = Field(default=None, max_length=100, description="Who is approving")
+
+
 class DraftOut(ORM):
     id: int
-    deal_id: int
     contact_id: int
     subject: str
     body: str
@@ -155,18 +177,27 @@ class DraftOut(ORM):
 
 
 class GenerateIn(BaseModel):
-    deal_id: int
     contact_id: int
     kind: DraftKind = DraftKind.INTRO
     instructions: str | None = Field(default=None, max_length=1000)
 
 
 # ---- dashboard
+class OwnerRow(BaseModel):
+    owner: str | None
+    not_contacted: int = 0
+    contacted: int = 0
+    responded: int = 0
+    no_response: int = 0
+    total: int = 0
+
+
 class DashboardOut(BaseModel):
-    stage_counts: dict[DealStage, int]
-    followups_due: list[DealOut]
-    stale: list[DealOut]
-    new_replies: list[DealOut]
+    total: int
+    status_counts: dict[ContactStatus, int]
+    owners: list[OwnerRow]
+    needs_followup: list[ContactOut]
+    new_replies: list[ContactOut]
 
 
 class SyncOut(BaseModel):
@@ -182,3 +213,6 @@ class ReplyStatusOut(BaseModel):
     polling: bool
     last_sync_at: datetime | None
     last_error: str | None
+
+
+EMAIL_RE = re.compile(r"[\w.+'-]+@[\w-]+(?:\.[\w-]+)+")

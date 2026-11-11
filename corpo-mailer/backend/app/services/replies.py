@@ -2,10 +2,10 @@
 
 For each new message in the mailbox:
   * ours, or an out-of-office auto-reply  -> ignored
-  * a delivery failure                    -> noted on the deal; a permanent one marks the
+  * a delivery failure                    -> noted on the contact; a permanent one marks the
                                              contact do-not-contact (stop mailing dead addresses)
-  * a reply from a prospect               -> logged on their deal and flagged unread
-Stage changes are left to a person.
+  * a reply from a prospect               -> logged on their timeline and flagged unread
+The status is left for a person to confirm.
 """
 
 import re
@@ -16,8 +16,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.base import utcnow
-from app.models import Contact, Deal, Interaction, MailboxState
-from app.models.enums import InteractionSource, InteractionType
+from app.models import Contact, Interaction, MailboxState
+from app.models.enums import Channel, InteractionSource, InteractionType
 from app.providers.imap import IncomingMessage, MailboxError, MailboxReader
 
 _FINAL_RECIPIENT = re.compile(
@@ -51,10 +51,8 @@ def _contact_by_email(db: Session, email: str) -> Contact | None:
     return db.scalars(select(Contact).where(func.lower(Contact.email) == email.lower())).first()
 
 
-def _match_reply(
-    db: Session, msg: IncomingMessage
-) -> tuple[Interaction, Contact | None, bool] | None:
-    """Find the email we sent that this answers. Returns (sent, who replied, matched_by_thread)."""
+def _match_reply(db: Session, msg: IncomingMessage) -> tuple[Contact, bool] | None:
+    """Find the person this answers. Returns (contact, matched_by_thread)."""
     if msg.in_reply_to:
         sent = db.scalars(
             select(Interaction)
@@ -65,15 +63,17 @@ def _match_reply(
             .order_by(Interaction.occurred_at.desc())
         ).first()
         if sent:
-            deal = db.get(Deal, sent.deal_id)
+            original = db.get(Contact, sent.contact_id)
+            # A colleague may answer on their behalf: credit whoever's address it came from.
             colleague = next(
-                (c for c in deal.company.contacts if c.email.lower() == msg.from_email), None
+                (c for c in original.company.contacts if (c.email or "").lower() == msg.from_email),
+                None,
             )
-            return sent, colleague or db.get(Contact, sent.contact_id), True
+            return colleague or original, True
     # Fallback (e.g. the mail provider rewrote our Message-ID): the sender is a contact we emailed.
     contact = _contact_by_email(db, msg.from_email)
-    if contact and (sent := _sent_to(db, contact.id)):
-        return sent, contact, False
+    if contact and _sent_to(db, contact.id):
+        return contact, False
     return None
 
 
@@ -83,7 +83,7 @@ def _handle_bounce(db: Session, msg: IncomingMessage) -> bool:
         e.lower() for e in _ANY_EMAIL.findall(text)
     }
     contact = next((c for e in failed if (c := _contact_by_email(db, e))), None)
-    if contact is None or (sent := _sent_to(db, contact.id)) is None:
+    if contact is None or _sent_to(db, contact.id) is None:
         return False
     status = _STATUS.search(text)
     permanent = bool(status and status.group(1) == "5")
@@ -91,7 +91,6 @@ def _handle_bounce(db: Session, msg: IncomingMessage) -> bool:
         contact.do_not_contact = True  # safe direction: it only ever stops us mailing them
     db.add(
         Interaction(
-            deal_id=sent.deal_id,
             contact_id=contact.id,
             type=InteractionType.NOTE,
             source=InteractionSource.AUTO,
@@ -114,14 +113,13 @@ def _handle_reply(db: Session, msg: IncomingMessage, own: set[str]) -> str:
     matched = _match_reply(db, msg)
     if matched is None:
         return "unmatched"
-    sent, contact, by_thread = matched
-    deal = db.get(Deal, sent.deal_id)
+    contact, by_thread = matched
     note = "" if by_thread else "\n\n(Matched by the sender's address, not the email thread.)"
     db.add(
         Interaction(
-            deal_id=deal.id,
-            contact_id=contact.id if contact else None,
+            contact_id=contact.id,
             type=InteractionType.EMAIL_REPLY,
+            channel=Channel.EMAIL,
             source=InteractionSource.AUTO,
             subject=msg.subject,
             content=(msg.body or "(no text)") + note,
@@ -129,9 +127,10 @@ def _handle_reply(db: Session, msg: IncomingMessage, own: set[str]) -> str:
             occurred_at=msg.sent_at,
         )
     )
-    deal.reply_unread = True
-    if deal.last_contacted_at is None or msg.sent_at > deal.last_contacted_at:
-        deal.last_contacted_at = msg.sent_at
+    # Flag it for a person. The status is not changed automatically: they confirm "Responded".
+    contact.reply_unread = True
+    if contact.last_contacted_at is None or msg.sent_at > contact.last_contacted_at:
+        contact.last_contacted_at = msg.sent_at
     return "reply"
 
 

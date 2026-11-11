@@ -13,9 +13,10 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.db.base import utcnow
-from app.models import Contact, Deal, Draft, Interaction
-from app.models.enums import DealStage, DraftStatus, InteractionType
+from app.models import Contact, Draft, Interaction
+from app.models.enums import Channel, DraftStatus, InteractionType
 from app.providers.mail import Mailer, MailError
+from app.services import contacts as rules
 
 
 class DraftError(Exception):
@@ -32,6 +33,12 @@ def _recipient(db: Session, draft: Draft) -> Contact:
     if contact is None:
         raise DraftError("Recipient no longer exists")
     return contact
+
+
+def _address(contact: Contact) -> str:
+    if not contact.email:
+        raise DraftError("This contact has no email address yet; add one first")
+    return contact.email
 
 
 def edit_draft(db: Session, draft: Draft, subject: str | None, body: str | None) -> Draft:
@@ -58,7 +65,7 @@ def approve_draft(db: Session, draft: Draft, operator: str) -> Draft:
     if contact.do_not_contact:
         raise DraftError("This contact is marked do-not-contact")
     draft.status = DraftStatus.APPROVED
-    draft.approved_hash = content_hash(contact.email, draft.subject, draft.body)
+    draft.approved_hash = content_hash(_address(contact), draft.subject, draft.body)
     draft.approved_by = operator
     draft.approved_at = utcnow()
     draft.last_error = None
@@ -80,7 +87,8 @@ def send_draft(db: Session, draft: Draft, mailer: Mailer) -> Draft:
         raise DraftError("Draft has not been approved by a human")
     if contact.do_not_contact:
         raise DraftError("This contact is marked do-not-contact")
-    if content_hash(contact.email, draft.subject, draft.body) != draft.approved_hash:
+    address = _address(contact)
+    if content_hash(address, draft.subject, draft.body) != draft.approved_hash:
         _void_approval(draft)
         db.commit()
         raise DraftError("Draft changed since approval; review and approve it again")
@@ -98,12 +106,12 @@ def send_draft(db: Session, draft: Draft, mailer: Mailer) -> Draft:
     if claimed != 1:
         raise DraftError("This draft is already being sent, or was changed; reload and check")
     # Re-check under the claim: an edit that landed between our check and the claim voids it.
-    if content_hash(contact.email, draft.subject, draft.body) != draft.approved_hash:
+    if content_hash(address, draft.subject, draft.body) != draft.approved_hash:
         _void_approval(draft)
         db.commit()
         raise DraftError("Draft changed since approval; review and approve it again")
     try:
-        message_id = mailer.send(to=contact.email, subject=draft.subject, body=draft.body)
+        message_id = mailer.send(to=address, subject=draft.subject, body=draft.body)
     except MailError as exc:
         draft.status = DraftStatus.APPROVED
         draft.last_error = str(exc)
@@ -114,15 +122,12 @@ def send_draft(db: Session, draft: Draft, mailer: Mailer) -> Draft:
     draft.status = DraftStatus.SENT
     draft.sent_at = now
     draft.last_error = None
-    deal = db.get(Deal, draft.deal_id)
-    deal.last_contacted_at = now
-    if deal.stage == DealStage.PROSPECT:
-        deal.stage = DealStage.CONTACTED
+    rules.record_outreach(contact, Channel.EMAIL, now)  # contacted, by email, just now
     db.add(
         Interaction(
-            deal_id=draft.deal_id,
             contact_id=contact.id,
             type=InteractionType.EMAIL_SENT,
+            channel=Channel.EMAIL,
             subject=draft.subject,
             content=draft.body,
             message_id=message_id,

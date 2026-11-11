@@ -7,7 +7,7 @@ from app.providers.llm import LLMError, OpenRouterLLM, rotated
 
 
 def settings(models):
-    return Settings(secret_key="k", app_password="p", openrouter_api_key="sk", llm_models=models)
+    return Settings(openrouter_api_key="sk", llm_models=models)
 
 
 def test_rotated_cycles_start_model():
@@ -58,6 +58,6 @@ def test_all_models_failing_raises(monkeypatch):
 
 
 def test_missing_key_raises():
-    s = Settings(secret_key="k", app_password="p", openrouter_api_key="")
+    s = Settings(openrouter_api_key="")
     with pytest.raises(LLMError, match="OPENROUTER_API_KEY"):
         OpenRouterLLM(s).complete(system="s", user="u")
