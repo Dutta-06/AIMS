@@ -4,30 +4,32 @@ import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { Company } from "@/lib/types";
+import { contactLabel } from "@/lib/format";
+import type { Company, Contact } from "@/lib/types";
 import { snap } from "./motion/springs";
-import { useToast } from "./ToastProvider";
 
 const PAGES = [
   { label: "Dashboard", href: "/" },
-  { label: "Pipeline", href: "/pipeline" },
+  { label: "Leads", href: "/leads" },
+  { label: "Import leads", href: "/leads/import" },
   { label: "Companies", href: "/companies" },
   { label: "Drafts", href: "/drafts" },
 ];
 
 type Item =
   | { kind: "page"; key: string; label: string; href: string }
-  | { kind: "company"; key: string; label: string; company: Company };
+  | { kind: "lead"; key: string; label: string; sub: string; href: string }
+  | { kind: "company"; key: string; label: string; href: string };
 
 /**
- * ⌘K: jump to a page, or to a company's deal. It only navigates; there is deliberately no
+ * ⌘K: jump to a page, a lead or a company. It only navigates; there is deliberately no
  * command here that approves or sends anything.
  */
 export default function CommandPalette({ onClose }: { onClose: () => void }) {
   const router = useRouter();
-  const toast = useToast();
   const [q, setQ] = useState("");
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [leads, setLeads] = useState<Contact[]>([]);
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -38,8 +40,12 @@ export default function CommandPalette({ onClose }: { onClose: () => void }) {
     const timer = setTimeout(() => {
       api.companies
         .list(q.trim())
-        .then((rows) => !cancelled && setCompanies(rows.slice(0, 6)))
+        .then((rows) => !cancelled && setCompanies(rows.slice(0, 4)))
         .catch(() => !cancelled && setCompanies([]));
+      api.contacts
+        .list({ q: q.trim() })
+        .then((rows) => !cancelled && setLeads(rows.slice(0, 5)))
+        .catch(() => !cancelled && setLeads([]));
     }, 180);
     return () => {
       cancelled = true;
@@ -55,24 +61,21 @@ export default function CommandPalette({ onClose }: { onClose: () => void }) {
       label: p.label,
       href: p.href,
     }));
-    const cos: Item[] = needle
-      ? companies.map((c) => ({ kind: "company", key: `co:${c.id}`, label: c.name, company: c }))
+    const found: Item[] = needle
+      ? [
+          ...leads.map((c): Item => ({ kind: "lead", key: `lead:${c.id}`, label: contactLabel(c), sub: c.company_name, href: `/leads/${c.id}` })),
+          ...companies.map((c): Item => ({ kind: "company", key: `co:${c.id}`, label: c.name, href: `/companies/${c.id}` })),
+        ]
       : [];
-    return [...pages, ...cos];
-  }, [q, companies]);
+    return [...pages, ...found];
+  }, [q, companies, leads]);
 
   const clamped = Math.min(active, Math.max(items.length - 1, 0));
 
-  async function open(item: Item | undefined) {
+  function open(item: Item | undefined) {
     if (!item) return;
     onClose();
-    if (item.kind === "page") return router.push(item.href);
-    try {
-      const deals = await api.deals.list({ company_id: item.company.id });
-      router.push(deals[0] ? `/deals/${deals[0].id}` : `/companies/${item.company.id}`);
-    } catch {
-      toast(`Couldn't open ${item.company.name}`, "error");
-    }
+    router.push(item.href);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -84,7 +87,7 @@ export default function CommandPalette({ onClose }: { onClose: () => void }) {
       listRef.current?.children[next]?.scrollIntoView({ block: "nearest" });
     } else if (e.key === "Enter") {
       e.preventDefault();
-      void open(items[clamped]);
+      open(items[clamped]);
     } else if (e.key === "Tab") e.preventDefault(); // one focusable control: keep focus inside
   }
 
@@ -113,7 +116,10 @@ export default function CommandPalette({ onClose }: { onClose: () => void }) {
           onChange={(e) => {
             setQ(e.target.value);
             setActive(0);
-            if (!e.target.value.trim()) setCompanies([]);
+            if (!e.target.value.trim()) {
+              setCompanies([]);
+              setLeads([]);
+            }
           }}
           onKeyDown={onKeyDown}
           role="combobox"
@@ -136,13 +142,16 @@ export default function CommandPalette({ onClose }: { onClose: () => void }) {
               role="option"
               aria-selected={i === clamped}
               onMouseEnter={() => setActive(i)}
-              onClick={() => void open(it)}
+              onClick={() => open(it)}
               className={`flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 text-sm ${
                 i === clamped ? "bg-glass-strong text-heading" : "text-body"
               }`}
             >
-              <span>{it.label}</span>
-              <span className="text-xs text-faint">{it.kind === "page" ? "Go to" : "Company"}</span>
+              <span>
+                {it.label}
+                {it.kind === "lead" && <span className="ml-2 text-xs text-faint">{it.sub}</span>}
+              </span>
+              <span className="text-xs text-faint">{it.kind === "page" ? "Go to" : it.kind === "lead" ? "Lead" : "Company"}</span>
             </li>
           ))}
         </ul>

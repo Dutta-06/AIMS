@@ -9,7 +9,7 @@ const FOCUSABLE =
 const stack: symbol[] = [];
 
 /**
- * Keyboard behaviour shared by every modal (sheet, confirm dialog, stage picker):
+ * Keyboard behaviour shared by every modal (sheet, confirm dialog, status picker):
  *  - Esc closes the topmost one.
  *  - Tab stays inside, and if focus has fallen out (e.g. the button you pressed disabled itself
  *    while a request ran) Tab brings it back.

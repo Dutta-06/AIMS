@@ -1,5 +1,15 @@
 # Rebuild the Corpo Mailer interface: a cinematic, dark sponsor desk
 
+> **Product update (read this first).** After this brief was written, the product became an
+> **outreach tracker** modelled on the team's spreadsheet: the unit is a *lead* (a person at a
+> company) with four statuses (not contacted / contacted / responded / no response), a multi-select
+> of channels (email, LinkedIn, Discord, personal), an owner and remarks. **Money, deals and
+> pipeline stages were removed, and so was the login.** Where this brief says deal, pipeline,
+> stage, committed or paid, read lead, board, status, responded. The design language (Signal
+> background, glass surfaces, motion rules, the hold-to-send interaction) is unchanged; the
+> sign-in hero was dropped, and the Signal entrance burst now plays on every fresh load.
+
+
 You are an expert creative front-end developer. Restyle and restructure the **existing Next.js app**
 in `corpo-mailer/frontend` (Next 16 App Router, React 19, Tailwind 4, TypeScript) into the interface
 described below. This is a working product, not a mock-up: every screen talks to a real API and

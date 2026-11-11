@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import {
   useRef,
   type ComponentPropsWithRef,
@@ -11,8 +10,8 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import WordReveal from "@/components/motion/WordReveal";
-import { STAGE_COLOR, STAGE_LABEL } from "@/lib/format";
-import type { Stage } from "@/lib/types";
+import { CHANNEL_LABEL, STATUS_COLOR, STATUS_LABEL } from "@/lib/format";
+import { CHANNELS, STATUSES, type Channel, type Status } from "@/lib/types";
 
 const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
 
@@ -139,17 +138,101 @@ export const Select = (p: SelectHTMLAttributes<HTMLSelectElement>) => (
   <select {...p} className={cx(fieldCls, "h-11 [&>option]:bg-[#14121c]", p.className)} />
 );
 
-/** Stage chip: the same colour means the same stage everywhere. */
-export function StageBadge({ stage }: { stage: Stage }) {
-  const color = STAGE_COLOR[stage];
+/** Status chip: the same colour means the same status everywhere (yellow/green/red as in the sheet). */
+export function StatusBadge({ status }: { status: Status }) {
+  const color = STATUS_COLOR[status];
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[0.72rem] font-medium"
       style={{ color, background: `color-mix(in srgb, ${color} 14%, transparent)` }}
     >
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: "currentColor" }} />
-      {STAGE_LABEL[stage]}
+      {STATUS_LABEL[status]}
     </span>
+  );
+}
+
+/** A status you can change in place. It is a real <select>, so it works with keyboard and screen readers. */
+export function StatusSelect({
+  value,
+  onChange,
+  disabled,
+  label,
+}: {
+  value: Status;
+  onChange: (status: Status) => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  const color = STATUS_COLOR[value];
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value as Status)}
+      className="h-7 cursor-pointer appearance-none rounded-full border-0 px-3 text-[0.75rem] font-medium outline-none transition-[filter] hover:brightness-125 focus-visible:ring-2 focus-visible:ring-heading/70 disabled:cursor-not-allowed disabled:opacity-60"
+      style={{ color, background: `color-mix(in srgb, ${color} 16%, transparent)` }}
+    >
+      {STATUSES.map((st) => (
+        <option key={st} value={st} className="bg-[#14121c] text-heading">
+          {STATUS_LABEL[st]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Read-only channel pills. */
+export function ChannelPills({ channels }: { channels: Channel[] }) {
+  if (channels.length === 0) return <span className="text-faint">—</span>;
+  return (
+    <span className="flex flex-wrap gap-1">
+      {channels.map((c) => (
+        <span key={c} className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[0.7rem] text-body">
+          {CHANNEL_LABEL[c]}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** Multi-select for how someone was reached. Each channel is a toggle button. */
+export function ChannelPicker({
+  value,
+  onChange,
+  disabled,
+  small,
+}: {
+  value: Channel[];
+  onChange: (channels: Channel[]) => void;
+  disabled?: boolean;
+  small?: boolean;
+}) {
+  return (
+    <div role="group" aria-label="Channels used" className={cx("flex gap-1.5", small ? "flex-nowrap gap-1" : "flex-wrap")}>
+      {CHANNELS.map((c) => {
+        const on = value.includes(c);
+        return (
+          <button
+            key={c}
+            type="button"
+            aria-pressed={on}
+            disabled={disabled}
+            onClick={() => onChange(on ? value.filter((x) => x !== c) : [...value, c])}
+            className={cx(
+              "rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-heading/70 disabled:opacity-50",
+              small ? "whitespace-nowrap px-2 py-0.5 text-[0.68rem]" : "px-3 py-1 text-[0.8rem]",
+              on
+                ? "border-transparent bg-heading/90 font-medium text-action-fg"
+                : "border-glass-border bg-glass text-body hover:bg-glass-strong hover:text-heading",
+            )}
+          >
+            {CHANNEL_LABEL[c]}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -201,13 +284,5 @@ export function Empty({ children }: { children: ReactNode }) {
     <p className="rounded-[1.25rem] border border-dashed border-hairline py-8 text-center text-sm text-faint">
       {children}
     </p>
-  );
-}
-
-export function DealLink({ id, children }: { id: number; children: ReactNode }) {
-  return (
-    <Link href={`/deals/${id}`} className="font-medium text-heading hover:underline">
-      {children}
-    </Link>
   );
 }

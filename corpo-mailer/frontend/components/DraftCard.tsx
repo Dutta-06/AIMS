@@ -9,7 +9,7 @@ import { useSignal } from "@/components/signal/SignalProvider";
 import { useToast } from "@/components/ToastProvider";
 import { Button, Card, ErrorNote, Field, Input, Pill, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
-import { fmtDateTime } from "@/lib/format";
+import { contactLabel, fmtDateTime } from "@/lib/format";
 import { useAction } from "@/lib/hooks";
 import type { Contact, Draft } from "@/lib/types";
 
@@ -49,8 +49,8 @@ export default function DraftCard({
   const locked = draft.status === "sent" || draft.status === "sending";
   const dirty = subject !== draft.subject || body !== draft.body;
   const dnc = contact?.do_not_contact ?? false;
-  const recipient = contact ? `${contact.name} <${contact.email}>` : `contact #${draft.contact_id}`;
   const email = contact?.email ?? "recipient";
+  const recipient = contact ? `${contactLabel(contact)} <${contact.email ?? "no email"}>` : `contact #${draft.contact_id}`;
 
   const refresh = () => {
     setSubjectEdit(null);
@@ -103,8 +103,12 @@ export default function DraftCard({
 
       <p className="text-sm text-body">
         <span className="text-faint">To </span>
-        <span className="text-heading">{contact?.name ?? `Contact #${draft.contact_id}`}</span>
-        {contact && <span className="ml-2 font-mono text-[0.82rem] text-body">{contact.email}</span>}
+        <span className="text-heading">{contact ? contactLabel(contact) : `Contact #${draft.contact_id}`}</span>
+        {contact?.email ? (
+          <span className="ml-2 font-mono text-[0.82rem] text-body">{contact.email}</span>
+        ) : (
+          <span className="ml-2 text-[0.82rem] text-danger">no email address</span>
+        )}
       </p>
 
       <Field label="Subject">
@@ -144,8 +148,8 @@ export default function DraftCard({
           {draft.status === "draft" && (
             <Button
               variant={dirty ? "secondary" : "primary"}
-              disabled={busy || dirty || dnc}
-              title={dirty ? "Save your changes first" : dnc ? "This contact is do-not-contact" : undefined}
+              disabled={busy || dirty || dnc || !contact?.email}
+              title={dirty ? "Save your changes first" : dnc ? "This contact is do-not-contact" : !contact?.email ? "Add an email address first" : undefined}
               onClick={approve}
             >
               Approve

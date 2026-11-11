@@ -8,9 +8,10 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { soft } from "@/components/motion/springs";
 import WordReveal from "@/components/motion/WordReveal";
 import { useToast } from "@/components/ToastProvider";
-import { Button, Card, Empty, ErrorNote, Field, Input, Loading, Pill, SectionTitle, StageBadge, Textarea } from "@/components/ui";
+import { Button, Card, ChannelPills, Empty, ErrorNote, Field, Input, Loading, Pill, SectionTitle, StatusSelect, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
-import { fmtMoney } from "@/lib/format";
+import { contactLabel } from "@/lib/format";
+import { useMe } from "@/lib/me";
 import { useAction, useQuery } from "@/lib/hooks";
 import type { Company, Contact } from "@/lib/types";
 
@@ -78,23 +79,43 @@ function ContactCard({
   busy,
   onToggle,
   onRemove,
+  onStatus,
 }: {
   contact: Contact;
   busy: boolean;
   onToggle: () => void;
   onRemove: () => void;
+  onStatus: (status: Contact["status"]) => void;
 }) {
   return (
     <Card glass className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="flex items-center gap-2 font-medium text-heading">
-          {contact.name}
+          <Link href={`/leads/${contact.id}`} className="hover:underline">
+            {contactLabel(contact)}
+          </Link>
           {contact.do_not_contact && <Pill tone="rose">Do not contact</Pill>}
+          {contact.reply_unread && <Pill tone="green">New reply</Pill>}
         </p>
-        <p className="mt-0.5 text-sm text-body">{contact.role ?? "—"}</p>
-        <p className="mt-1 font-mono text-[0.82rem] text-body">{contact.email}</p>
+        <p className="mt-0.5 text-sm text-body">
+          {[contact.role, contact.owner && `owner: ${contact.owner}`].filter(Boolean).join(" · ") || "—"}
+        </p>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.82rem] text-body">
+          {contact.email && <span className="font-mono">{contact.email}</span>}
+          {contact.linkedin && (
+            <a href={contact.linkedin.startsWith("http") ? contact.linkedin : `https://${contact.linkedin}`} target="_blank" rel="noopener noreferrer" className="hover:text-heading hover:underline">
+              LinkedIn ↗
+            </a>
+          )}
+        </p>
+        {contact.channels.length > 0 && (
+          <div className="mt-2">
+            <ChannelPills channels={contact.channels} />
+          </div>
+        )}
       </div>
-      <div className="flex gap-1">
+      <div className="flex flex-wrap items-center gap-1">
+        <StatusSelect label={`Status of ${contactLabel(contact)}`} value={contact.status} disabled={busy} onChange={onStatus} />
         <Button small variant="ghost" disabled={busy} onClick={onToggle}>
           {contact.do_not_contact ? "Allow contact" : "Do not contact"}
         </Button>
@@ -111,27 +132,22 @@ export default function CompanyPage() {
   const router = useRouter();
   const toast = useToast();
   const reduce = useReducedMotion();
-  const [contactForm, setContactForm] = useState({ name: "", email: "", role: "" });
+  const me = useMe();
+  const [contactForm, setContactForm] = useState({ name: "", email: "", linkedin: "", role: "", owner: "" });
   const [confirm, setConfirm] = useState<{ kind: "company" } | { kind: "contact"; contact: Contact } | null>(null);
   const addContact = useAction();
   const rowAction = useAction();
-  const dealAction = useAction();
   const del = useAction();
 
   const { data, error, loading, reload } = useQuery(`company:${id}`, async () => {
-    const [company, contacts, deals, drafts] = await Promise.all([
-      api.companies.get(id),
-      api.contacts.list(id),
-      api.deals.list({ company_id: id }),
-      api.drafts.list(),
-    ]);
-    const dealIds = new Set(deals.map((d) => d.id));
-    return { company, contacts, deals, draftCount: drafts.filter((d) => dealIds.has(d.deal_id)).length };
+    const [company, contacts, drafts] = await Promise.all([api.companies.get(id), api.contacts.list({ company_id: id }), api.drafts.list()]);
+    const ids = new Set(contacts.map((c) => c.id));
+    return { company, contacts, draftCount: drafts.filter((d) => ids.has(d.contact_id)).length };
   });
 
   if (loading) return <Loading />;
   if (error || !data) return <ErrorNote message={error} />;
-  const { company, contacts, deals, draftCount } = data;
+  const { company, contacts, draftCount } = data;
 
   return (
     <>
@@ -178,6 +194,9 @@ export default function CompanyPage() {
                           if (await rowAction.run(() => api.contacts.update(c.id, { do_not_contact: !c.do_not_contact }))) reload();
                         }}
                         onRemove={() => setConfirm({ kind: "contact", contact: c })}
+                        onStatus={async (status) => {
+                          if (await rowAction.run(() => api.contacts.update(c.id, { status }))) reload();
+                        }}
                       />
                     </motion.div>
                   ))}
@@ -192,74 +211,45 @@ export default function CompanyPage() {
                 const ok = await addContact.run(() =>
                   api.contacts.create({
                     company_id: id,
-                    name: contactForm.name.trim(),
-                    email: contactForm.email.trim(),
-                    role: contactForm.role.trim() || undefined,
+                    name: contactForm.name,
+                    email: contactForm.email,
+                    linkedin: contactForm.linkedin,
+                    role: contactForm.role,
+                    owner: contactForm.owner || me,
                   }),
                 );
                 if (ok) {
-                  toast(`Added ${contactForm.name.trim()}`);
-                  setContactForm({ name: "", email: "", role: "" });
+                  toast(`Added ${contactForm.name.trim() || contactForm.email.trim() || "the lead"}`);
+                  setContactForm({ name: "", email: "", linkedin: "", role: "", owner: "" });
                   reload();
                 }
               }}
             >
               <Card className="space-y-3">
                 <p className="text-sm font-medium text-heading">Add a contact</p>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Name">
-                    <Input value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })} required />
+                    <Input value={contactForm.name} onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })} />
+                  </Field>
+                  <Field label="Position">
+                    <Input value={contactForm.role} onChange={(e) => setContactForm({ ...contactForm, role: e.target.value })} placeholder="e.g. University Relations" />
+                  </Field>
+                  <Field label="LinkedIn link">
+                    <Input value={contactForm.linkedin} onChange={(e) => setContactForm({ ...contactForm, linkedin: e.target.value })} />
                   </Field>
                   <Field label="Email">
-                    <Input type="email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} required className="font-mono text-[0.85rem]" />
+                    <Input type="email" value={contactForm.email} onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })} className="font-mono text-[0.85rem]" />
                   </Field>
-                  <Field label="Role">
-                    <Input value={contactForm.role} onChange={(e) => setContactForm({ ...contactForm, role: e.target.value })} placeholder="e.g. University Relations" />
+                  <Field label="Owner">
+                    <Input value={contactForm.owner || me} onChange={(e) => setContactForm({ ...contactForm, owner: e.target.value })} />
                   </Field>
                 </div>
                 <ErrorNote message={addContact.error} />
-                <Button type="submit" variant="primary" disabled={addContact.busy}>
+                <Button type="submit" variant="primary" disabled={addContact.busy || !(contactForm.name.trim() || contactForm.email.trim() || contactForm.linkedin.trim())}>
                   {addContact.busy ? "Adding…" : "Add contact"}
                 </Button>
               </Card>
             </form>
-          </section>
-
-          <section>
-            <SectionTitle>Deals</SectionTitle>
-            {deals.length === 0 ? (
-              <Empty>No deal for this company yet.</Empty>
-            ) : (
-              <div className="space-y-3">
-                {deals.map((d) => (
-                  <Link key={d.id} href={`/deals/${d.id}`} className="block rounded-[1.25rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-heading/70">
-                    <Card glass className="flex flex-wrap items-center justify-between gap-3 transition-colors hover:border-white/25">
-                      <span className="text-sm text-body">
-                        Target <span className="font-mono text-heading">{fmtMoney(d.target_amount)}</span>
-                        <span className="mx-2 text-faint">·</span>
-                        Committed <span className="font-mono text-heading">{fmtMoney(d.committed_amount)}</span>
-                      </span>
-                      <StageBadge stage={d.stage} />
-                    </Card>
-                  </Link>
-                ))}
-              </div>
-            )}
-            {deals.length === 0 && (
-              <Button
-                className="mt-3"
-                variant="primary"
-                disabled={dealAction.busy}
-                onClick={async () => {
-                  if (await dealAction.run(() => api.deals.create({ company_id: id }))) reload();
-                }}
-              >
-                Start a deal
-              </Button>
-            )}
-            <div className="mt-3">
-              <ErrorNote message={dealAction.error} />
-            </div>
           </section>
         </div>
 
@@ -285,8 +275,8 @@ export default function CompanyPage() {
             }}
           >
             <p>
-              This permanently removes {plural(contacts.length, "contact")}, {plural(deals.length, "deal")}, {plural(draftCount, "email draft")}, and the
-              full history on every deal.
+              This permanently removes {plural(contacts.length, "contact")}, {plural(draftCount, "email draft")}, and everything logged on
+              them (the whole thread of emails, calls and notes).
             </p>
             <p className="mt-2 text-faint">It can&apos;t be undone.</p>
             {del.error && <p className="mt-3 text-danger">{del.error}</p>}
@@ -308,7 +298,8 @@ export default function CompanyPage() {
               }
             }}
           >
-            <p>Emails drafted to them are deleted with them. Anything already logged on the deal stays.</p>
+            <p>Their email drafts and everything logged on them (the thread of emails, calls and notes) are deleted too.</p>
+            <p className="mt-2 text-faint">It can&apos;t be undone.</p>
           </ConfirmDialog>
         )}
       </AnimatePresence>

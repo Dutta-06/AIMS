@@ -5,30 +5,28 @@ import { useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { snap } from "@/components/motion/springs";
 import { useModalKeys } from "@/components/useModalKeys";
-import { STAGE_COLOR, STAGE_LABEL } from "@/lib/format";
-import { STAGES, type Stage } from "@/lib/types";
+import { STATUS_COLOR, STATUS_LABEL } from "@/lib/format";
+import { STATUSES, type Status } from "@/lib/types";
 
 /**
- * The keyboard, touch and screen-reader way to move a deal: a dialog listing all nine stages.
- * (Dragging is the fast path; this makes sure nothing depends on it.)
+ * The keyboard, touch and screen-reader way to change a lead's status from the board: a dialog
+ * listing the four statuses. (Dragging is the fast path; nothing depends on it.)
  */
-export default function StagePicker({
-  company,
+export default function StatusPicker({
+  who,
   current,
   onPick,
   onClose,
 }: {
-  company: string;
-  current: Stage;
-  onPick: (stage: Stage) => void;
+  who: string;
+  current: Status;
+  onPick: (status: Status) => void;
   onClose: () => void;
 }) {
   const titleId = useId();
   const box = useRef<HTMLDivElement>(null);
-
   useModalKeys(box, onClose);
 
-  // Arrow keys move through the stages (Esc and Tab are handled by the shared modal hook).
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     const items = [...(box.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
@@ -57,23 +55,23 @@ export default function StagePicker({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 8, scale: 0.98 }}
         transition={snap}
-        className="w-[22rem] max-w-full rounded-[1.25rem] border border-glass-border bg-[rgba(14,13,20,0.9)] p-3 shadow-2xl backdrop-blur-2xl"
+        className="w-[20rem] max-w-full rounded-[1.25rem] border border-glass-border bg-[rgba(14,13,20,0.9)] p-3 shadow-2xl backdrop-blur-2xl"
       >
         <h2 id={titleId} className="px-3 pb-2 pt-2 text-[0.95rem] font-medium text-heading">
-          Move {company} to…
+          Move {who} to…
         </h2>
         <ul>
-          {STAGES.map((s) => (
+          {STATUSES.map((s) => (
             <li key={s}>
               <button
                 type="button"
-                autoFocus={s !== current && s === STAGES[(STAGES.indexOf(current) + 1) % STAGES.length]}
+                autoFocus={s === STATUSES[(STATUSES.indexOf(current) + 1) % STATUSES.length]}
                 disabled={s === current}
                 onClick={() => onPick(s)}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-body transition-colors hover:bg-glass-strong hover:text-heading focus-visible:bg-glass-strong focus-visible:text-heading focus-visible:outline-none disabled:opacity-100"
               >
-                <span className="h-2 w-2 rounded-full" style={{ background: STAGE_COLOR[s] }} />
-                <span className={s === current ? "text-heading" : ""}>{STAGE_LABEL[s]}</span>
+                <span className="h-2 w-2 rounded-full" style={{ background: STATUS_COLOR[s] }} />
+                <span className={s === current ? "text-heading" : ""}>{STATUS_LABEL[s]}</span>
                 {s === current && <span className="ml-auto text-xs text-faint">Current</span>}
               </button>
             </li>

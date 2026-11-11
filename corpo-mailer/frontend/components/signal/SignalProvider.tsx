@@ -1,6 +1,5 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { FRAGMENT, VERTEX } from "@/lib/signal/shader";
 
@@ -11,7 +10,9 @@ const SignalContext = createContext<SignalApi>({ pulse: () => {} });
 export const useSignal = () => useContext(SignalContext);
 
 const easeOutCubic = (t: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
-const intensityFor = (path: string) => (path === "/login" ? 1.0 : 0.55);
+// One calm intensity everywhere; the entrance burst on first load rises above it and settles to it.
+const REST = 0.55;
+const BURST_PEAK = 1.5;
 
 // A fixed-size film grain: tiny inline SVG noise, blended over everything.
 const GRAIN = `url("data:image/svg+xml,${encodeURIComponent(
@@ -19,7 +20,6 @@ const GRAIN = `url("data:image/svg+xml,${encodeURIComponent(
 )}")`;
 
 type Sim = {
-  login: boolean;
   reduced: boolean;
   cur: number; // intensity currently on screen
   from: number;
@@ -35,14 +35,12 @@ type Sim = {
 };
 
 export default function SignalProvider({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sim = useRef<Sim>({
-    login: false,
     reduced: false,
-    cur: 0.32,
-    from: 0.32,
-    to: 0.32,
+    cur: REST,
+    from: REST,
+    to: REST,
     tweenStart: 0,
     burstStart: null,
     burstPulsed: false,
@@ -73,20 +71,6 @@ export default function SignalProvider({ children }: { children: React.ReactNode
     S.pulseAt = [x / window.innerWidth, 1 - y / window.innerHeight];
     S.pulseStart = performance.now();
   }, []);
-
-  // Route changes: retarget the intensity (900ms tween) and the render mode.
-  useEffect(() => {
-    const S = sim.current;
-    S.login = pathname === "/login";
-    S.from = S.cur;
-    S.to = intensityFor(pathname);
-    S.tweenStart = performance.now();
-    S.burstStart = null; // leaving (or re-entering) login cancels the entrance burst
-    if (S.reduced) {
-      S.cur = S.from = S.to;
-      S.redraw();
-    }
-  }, [pathname]);
 
   // The renderer: mounted once for the life of the page.
   useEffect(() => {
@@ -140,7 +124,7 @@ export default function SignalProvider({ children }: { children: React.ReactNode
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      const scale = S.login ? 1 : 0.6;
+      const scale = S.burstStart !== null ? 1 : 0.6; // full size only during the entrance
       const w = Math.max(2, Math.round(window.innerWidth * dpr * scale));
       const h = Math.max(2, Math.round(window.innerHeight * dpr * scale));
       if (canvas.width !== w || canvas.height !== h) {
@@ -161,12 +145,12 @@ export default function SignalProvider({ children }: { children: React.ReactNode
           S.pulseAt = [0.5, 0.5];
           S.pulseStart = now;
         }
-        if (e < 500) intensity = 1.9 * easeOutCubic(e / 500);
-        else if (e < 1900) intensity = 1.9 - 0.9 * easeOutCubic((e - 500) / 1400);
+        if (e < 500) intensity = BURST_PEAK * easeOutCubic(e / 500);
+        else if (e < 1900) intensity = BURST_PEAK + (REST - BURST_PEAK) * easeOutCubic((e - 500) / 1400);
         else {
           S.burstStart = null;
-          intensity = S.to;
-          S.from = S.to;
+          intensity = REST;
+          S.from = REST;
         }
       } else {
         intensity = S.from + (S.to - S.from) * easeOutCubic((now - S.tweenStart) / 900);
@@ -190,21 +174,21 @@ export default function SignalProvider({ children }: { children: React.ReactNode
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       if (document.hidden) return;
-      if (!S.login && now - last < 33) return; // app routes run at 30fps
+      if (S.burstStart === null && now - last < 33) return; // 30fps once the entrance is over
       last = now;
       draw(now, (now - t0) / 1000);
     };
 
     S.redraw = () => draw(performance.now(), 20);
 
-    // First paint of /login gets the entrance burst; other routes just fade up quietly.
-    if (window.location.pathname === "/login" && !S.reduced) {
+    // Every fresh load of the app gets the entrance burst.
+    if (!S.reduced) {
       S.burstStart = performance.now();
       S.burstPulsed = false;
     }
 
     if (S.reduced) {
-      S.cur = S.from = S.to = intensityFor(window.location.pathname);
+      S.cur = S.from = S.to = REST;
       S.redraw();
     } else {
       raf = requestAnimationFrame(frame);
@@ -222,7 +206,7 @@ export default function SignalProvider({ children }: { children: React.ReactNode
       S.reduced = motionQuery.matches;
       if (S.reduced) {
         cancelAnimationFrame(raf);
-        S.cur = S.from = S.to = intensityFor(window.location.pathname);
+        S.cur = S.from = S.to = REST;
         S.redraw();
       } else {
         raf = requestAnimationFrame(frame);
@@ -243,7 +227,6 @@ export default function SignalProvider({ children }: { children: React.ReactNode
   }, []);
 
   const api = useMemo(() => ({ pulse }), [pulse]);
-  const login = pathname === "/login";
 
   return (
     <SignalContext.Provider value={api}>
@@ -252,22 +235,11 @@ export default function SignalProvider({ children }: { children: React.ReactNode
         aria-hidden="true"
         className="pointer-events-none fixed inset-0 z-0 h-full w-full"
       />
-      {/* Scrims cross-fade over 900ms when moving between the hero and the app. */}
       <div
         aria-hidden="true"
         data-scrim
-        className="pointer-events-none fixed inset-0 z-[1] transition-opacity duration-[900ms]"
-        style={{
-          opacity: login ? 1 : 0,
-          background:
-            "radial-gradient(110% 90% at 50% 46%, rgba(7,7,12,0.70) 0%, rgba(7,7,12,0.66) 26%, rgba(7,7,12,0.42) 55%, rgba(7,7,12,0.10) 100%)",
-        }}
-      />
-      <div
-        aria-hidden="true"
-        data-scrim
-        className="pointer-events-none fixed inset-0 z-[1] transition-opacity duration-[900ms]"
-        style={{ opacity: login ? 0 : 1, background: "var(--scrim-app)" }}
+        className="pointer-events-none fixed inset-0 z-[1]"
+        style={{ background: "var(--scrim-app)" }}
       />
       <div
         aria-hidden="true"

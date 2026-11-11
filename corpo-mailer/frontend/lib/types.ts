@@ -1,17 +1,8 @@
-export const STAGES = [
-  "prospect",
-  "contacted",
-  "replied",
-  "in_discussion",
-  "proposal_sent",
-  "committed",
-  "paid",
-  "declined",
-  "no_response",
-] as const;
-export type Stage = (typeof STAGES)[number];
+export const STATUSES = ["not_contacted", "contacted", "responded", "no_response"] as const;
+export type Status = (typeof STATUSES)[number];
 
-export const CLOSED_STAGES: readonly Stage[] = ["paid", "declined", "no_response"];
+export const CHANNELS = ["email", "linkedin", "discord", "personal"] as const;
+export type Channel = (typeof CHANNELS)[number];
 
 export type Company = {
   id: number;
@@ -23,38 +14,41 @@ export type Company = {
   created_at: string;
 };
 
+/** A lead: one person (or generic inbox) at a company, and where outreach to them stands. */
 export type Contact = {
   id: number;
   company_id: number;
-  name: string;
-  email: string;
-  role: string | null;
+  company_name: string;
+  name: string | null;
+  email: string | null;
   linkedin: string | null;
-  do_not_contact: boolean;
-  created_at: string;
-};
-
-export type Deal = {
-  id: number;
-  company_id: number;
-  stage: Stage;
+  role: string | null;
   owner: string | null;
-  target_amount: number | null;
-  committed_amount: number | null;
-  next_followup_at: string | null;
+  status: Status;
+  channels: Channel[];
+  remarks: string | null;
+  do_not_contact: boolean;
   last_contacted_at: string | null;
-  notes: string | null;
+  next_followup_at: string | null;
   reply_unread: boolean;
   created_at: string;
+  updated_at: string;
 };
 
-export type InteractionType = "email_sent" | "email_reply" | "call" | "meeting" | "note";
+export type InteractionType =
+  | "email_sent"
+  | "email_reply"
+  | "outreach"
+  | "reply"
+  | "call"
+  | "meeting"
+  | "note";
 
 export type Interaction = {
   id: number;
-  deal_id: number;
-  contact_id: number | null;
+  contact_id: number;
   type: InteractionType;
+  channel: Channel | null;
   source: "manual" | "auto";
   subject: string | null;
   content: string | null;
@@ -68,7 +62,6 @@ export type DraftKind = "intro" | "followup" | "thank_you";
 
 export type Draft = {
   id: number;
-  deal_id: number;
   contact_id: number;
   subject: string;
   body: string;
@@ -81,11 +74,21 @@ export type Draft = {
   created_at: string;
 };
 
+export type OwnerRow = {
+  owner: string | null;
+  not_contacted: number;
+  contacted: number;
+  responded: number;
+  no_response: number;
+  total: number;
+};
+
 export type Dashboard = {
-  stage_counts: Record<Stage, number>;
-  followups_due: Deal[];
-  stale: Deal[];
-  new_replies: Deal[];
+  total: number;
+  status_counts: Record<Status, number>;
+  owners: OwnerRow[];
+  needs_followup: Contact[];
+  new_replies: Contact[];
 };
 
 export type SyncResult = {
@@ -101,4 +104,26 @@ export type ReplyStatus = {
   polling: boolean;
   last_sync_at: string | null;
   last_error: string | null;
+};
+
+export type ImportRow = {
+  line: number;
+  action: "create" | "update" | "unchanged" | "skip";
+  company: string;
+  company_new: boolean;
+  name: string | null;
+  owner: string | null;
+  status: Status;
+  channels: Channel[];
+  warnings: string[];
+  reason: string | null;
+  changes: string[];
+};
+
+export type ImportPreview = {
+  summary: { rows: number; create: number; update: number; unchanged: number; skip: number; new_companies: number };
+  rows: ImportRow[];
+  truncated: boolean;
+  columns: Record<string, string>;
+  ignored_columns: string[];
 };

@@ -22,15 +22,10 @@
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --fast: 150ms;
 
-  --st-prospect: #8b93a7;
-  --st-contacted: #4cc2ff;
-  --st-replied: #2ee6c8;
-  --st-in_discussion: #7c8cff;
-  --st-proposal_sent: #b07cff;
-  --st-committed: #3ddc97;
-  --st-paid: #ffd166;
-  --st-declined: #ff5d73;
-  --st-no_response: #c9a26b;
+  --st-not_contacted: #8b93a7;
+  --st-contacted: #ffd166;
+  --st-responded: #3ddc97;
+  --st-no_response: #ff5d73;
 }
 
 @theme inline {

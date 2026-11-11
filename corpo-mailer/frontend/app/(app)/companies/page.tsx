@@ -6,9 +6,11 @@ import { useState } from "react";
 import { soft } from "@/components/motion/springs";
 import Sheet from "@/components/Sheet";
 import { useToast } from "@/components/ToastProvider";
-import { Button, Card, Empty, ErrorNote, Field, Input, Loading, PageHeader, StageBadge } from "@/components/ui";
+import { Button, Card, Empty, ErrorNote, Field, Input, Loading, PageHeader } from "@/components/ui";
 import { api } from "@/lib/api";
-import { errorMessage, useAction, useQuery } from "@/lib/hooks";
+import { STATUS_BAR, STATUS_LABEL } from "@/lib/format";
+import { STATUSES } from "@/lib/types";
+import { useAction, useQuery } from "@/lib/hooks";
 
 function AddCompany({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
   const toast = useToast();
@@ -27,18 +29,14 @@ function AddCompany({ onDone, onClose }: { onDone: () => void; onClose: () => vo
         source: f.source.trim() || null,
       });
       created = true;
-      try {
-        await api.deals.create({ company_id: c.id }); // every company starts as a prospect
-      } catch (err) {
-        throw new Error(`Added ${c.name}, but couldn't start its deal (${errorMessage(err)}). Open the company to start one.`);
-      }
+      void c;
     });
     if (ok) {
-      toast(`Added ${f.name.trim()} as a prospect`);
+      toast(`Added ${f.name.trim()}`);
       onDone();
       onClose();
     } else if (created) {
-      onDone(); // the company exists even though the deal didn't: make it visible
+      onDone();
     }
   }
 
@@ -59,7 +57,7 @@ function AddCompany({ onDone, onClose }: { onDone: () => void; onClose: () => vo
       <ErrorNote message={error} />
       <div className="mt-auto flex gap-2 pt-4">
         <Button type="submit" variant="primary" disabled={busy || !f.name.trim()} className="flex-1">
-          {busy ? "Adding…" : "Add as prospect"}
+          {busy ? "Adding…" : "Add company"}
         </Button>
         <Button type="button" variant="ghost" onClick={onClose}>
           Cancel
@@ -75,8 +73,8 @@ export default function CompaniesPage() {
   const [adding, setAdding] = useState(false);
   // Everything is loaded once and filtered as you type, so searching never flashes a loading state.
   const { data, error, loading, reload } = useQuery("companies", async () => {
-    const [companies, contacts, deals] = await Promise.all([api.companies.list(), api.contacts.list(), api.deals.list()]);
-    return { companies, contacts, deals };
+    const [companies, contacts] = await Promise.all([api.companies.list(), api.contacts.list()]);
+    return { companies, contacts };
   });
 
   const needle = q.trim().toLowerCase();
@@ -121,13 +119,14 @@ export default function CompaniesPage() {
             <span>Company</span>
             <span>Industry</span>
             <span>Contacts</span>
-            <span>Stage</span>
+            <span>Progress</span>
             <span />
           </div>
           <ul>
             {shown.map((c, i) => {
-              const deals = data.deals.filter((d) => d.company_id === c.id);
-              const contacts = data.contacts.filter((x) => x.company_id === c.id).length;
+              const people = data.contacts.filter((x) => x.company_id === c.id);
+              const contacts = people.length;
+              const mix = STATUSES.map((st) => ({ st, n: people.filter((p) => p.status === st).length }));
               return (
                 <motion.li
                   key={c.id}
@@ -146,7 +145,18 @@ export default function CompaniesPage() {
                     </span>
                     <span className="hidden font-mono text-[0.9rem] tabular-nums text-body md:block">{contacts}</span>
                     <span className="col-start-2 row-start-1 justify-self-end md:col-start-auto md:row-start-auto md:justify-self-start">
-                      {deals.length ? <StageBadge stage={deals[0].stage} /> : <span className="text-sm text-faint">No deal</span>}
+                      {contacts === 0 ? (
+                        <span className="text-sm text-faint">No contacts</span>
+                      ) : (
+                        <span
+                          className="flex h-2 w-full max-w-[8rem] gap-px overflow-hidden rounded-full bg-white/[0.07]"
+                          title={mix.map(({ st, n }) => `${STATUS_LABEL[st]} ${n}`).join(" · ")}
+                          role="img"
+                          aria-label={mix.filter(({ n }) => n).map(({ st, n }) => `${n} ${STATUS_LABEL[st]}`).join(", ")}
+                        >
+                          {mix.map(({ st, n }) => n > 0 && <span key={st} className={`h-full ${STATUS_BAR[st]}`} style={{ width: `${(n / contacts) * 100}%` }} />)}
+                        </span>
+                      )}
                     </span>
                     <span aria-hidden="true" className="hidden -translate-x-1 text-faint opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 md:block">
                       →

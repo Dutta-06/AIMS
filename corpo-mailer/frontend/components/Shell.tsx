@@ -2,19 +2,20 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import BrandGlyph from "@/components/BrandGlyph";
 import CommandPalette from "@/components/CommandPalette";
+import MeDialog from "@/components/MeDialog";
 import Reveal from "@/components/motion/Reveal";
-import { soft, snap } from "@/components/motion/springs";
+import { snap, soft } from "@/components/motion/springs";
 import { api } from "@/lib/api";
-import { getToken, operatorName, setToken, subscribeToken } from "@/lib/auth";
 import { useQuery } from "@/lib/hooks";
+import { useMe } from "@/lib/me";
 
 const NAV = [
   { href: "/", label: "Dashboard" },
-  { href: "/pipeline", label: "Pipeline" },
+  { href: "/leads", label: "Leads" },
   { href: "/companies", label: "Companies" },
   { href: "/drafts", label: "Drafts" },
 ];
@@ -42,18 +43,10 @@ function NavLinks({ pathname, count, layoutId, className }: { pathname: string; 
               active ? "text-heading" : "text-body hover:text-heading"
             }`}
           >
-            {active && (
-              <motion.span
-                layoutId={layoutId}
-                transition={snap}
-                className="absolute inset-0 rounded-full bg-glass-strong"
-              />
-            )}
+            {active && <motion.span layoutId={layoutId} transition={snap} className="absolute inset-0 rounded-full bg-glass-strong" />}
             <span className="relative">{n.label}</span>
             {n.href === "/drafts" && count > 0 && (
-              <span className="relative rounded-full bg-white/10 px-1.5 font-mono text-[0.7rem] tabular-nums text-heading">
-                {count}
-              </span>
+              <span className="relative rounded-full bg-white/10 px-1.5 font-mono text-[0.7rem] tabular-nums text-heading">{count}</span>
             )}
           </Link>
         );
@@ -62,11 +55,15 @@ function NavLinks({ pathname, count, layoutId, className }: { pathname: string; 
   );
 }
 
-function Chrome({ token, children }: { token: string; children: React.ReactNode }) {
+export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const reduce = useReducedMotion();
   const count = useReviewCount(pathname);
+  const me = useMe();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [meOpen, setMeOpen] = useState(false);
+  const { data: people } = useQuery("shell-owners", () => api.contacts.list());
+  const owners = [...new Set((people ?? []).map((c) => c.owner).filter((o): o is string => !!o))].sort();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -81,12 +78,7 @@ function Chrome({ token, children }: { token: string; children: React.ReactNode 
 
   return (
     <div className="min-h-screen">
-      <Reveal
-        as="header"
-        delay={150}
-        y={-12}
-        className="sticky top-4 z-20 mx-auto flex max-w-[76rem] items-center justify-between gap-3 px-4"
-      >
+      <Reveal as="header" delay={150} y={-12} className="sticky top-4 z-20 mx-auto flex max-w-[76rem] items-center justify-between gap-3 px-4">
         <Link
           href="/"
           className="flex h-12 items-center gap-2.5 rounded-full border border-glass-border bg-glass px-4 text-[1.02rem] font-medium tracking-[-0.01em] backdrop-blur-[14px]"
@@ -102,8 +94,7 @@ function Chrome({ token, children }: { token: string; children: React.ReactNode 
           className="hidden h-12 items-center gap-1 rounded-full border border-glass-border bg-glass p-1 backdrop-blur-[14px] backdrop-saturate-[1.4] md:flex"
         />
 
-        <div className="flex h-12 items-center gap-1 rounded-full border border-glass-border bg-glass p-1 pl-4 backdrop-blur-[14px]">
-          <span className="max-sm:hidden text-[0.88rem] text-body">{operatorName(token)}</span>
+        <div className="flex h-12 items-center gap-1 rounded-full border border-glass-border bg-glass p-1 backdrop-blur-[14px]">
           <button
             type="button"
             onClick={() => setPaletteOpen(true)}
@@ -114,10 +105,12 @@ function Chrome({ token, children }: { token: string; children: React.ReactNode 
           </button>
           <button
             type="button"
-            onClick={() => setToken(null)}
-            className="h-full rounded-full px-3.5 text-[0.88rem] text-body transition-colors hover:bg-glass hover:text-heading"
+            onClick={() => setMeOpen(true)}
+            aria-label={me ? `Working as ${me}. Change name` : "Set your name"}
+            className="flex h-full items-center gap-2 rounded-full px-3.5 text-[0.88rem] text-body transition-colors hover:bg-glass hover:text-heading"
           >
-            Sign out
+            <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${me ? "bg-ok" : "bg-faint"}`} />
+            <span className="max-w-[8rem] truncate">{me || "Who's working?"}</span>
           </button>
         </div>
       </Reveal>
@@ -140,22 +133,8 @@ function Chrome({ token, children }: { token: string; children: React.ReactNode 
         className="fixed inset-x-4 bottom-4 z-20 flex h-14 items-center justify-between gap-1 rounded-full border border-glass-border bg-[rgba(14,13,20,0.8)] p-1 backdrop-blur-[18px] md:hidden"
       />
 
-      <AnimatePresence>
-        {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
-      </AnimatePresence>
+      <AnimatePresence>{paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}</AnimatePresence>
+      <AnimatePresence>{meOpen && <MeDialog owners={owners} onClose={() => setMeOpen(false)} />}</AnimatePresence>
     </div>
   );
-}
-
-export default function Shell({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  // `undefined` on the server and first render; null/string once localStorage is read.
-  const token = useSyncExternalStore(subscribeToken, getToken, () => undefined);
-
-  useEffect(() => {
-    if (token === null) router.replace("/login");
-  }, [token, router]);
-
-  if (!token) return null;
-  return <Chrome token={token}>{children}</Chrome>;
 }
