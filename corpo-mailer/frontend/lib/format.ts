@@ -12,29 +12,30 @@ export const STAGE_LABEL: Record<Stage, string> = {
   no_response: "No response",
 };
 
-// Full class names so Tailwind can see them.
-export const STAGE_TONE: Record<Stage, string> = {
-  prospect: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
-  contacted: "bg-sky-500/15 text-sky-700 dark:text-sky-300",
-  replied: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300",
-  in_discussion: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
-  proposal_sent: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
-  committed: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  paid: "bg-green-600/20 text-green-800 dark:text-green-300",
-  declined: "bg-rose-500/15 text-rose-700 dark:text-rose-300",
-  no_response: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+// Stage colours live in CSS variables (--st-*) so they mean the same thing on every screen.
+export const STAGE_COLOR: Record<Stage, string> = {
+  prospect: "var(--st-prospect)",
+  contacted: "var(--st-contacted)",
+  replied: "var(--st-replied)",
+  in_discussion: "var(--st-in_discussion)",
+  proposal_sent: "var(--st-proposal_sent)",
+  committed: "var(--st-committed)",
+  paid: "var(--st-paid)",
+  declined: "var(--st-declined)",
+  no_response: "var(--st-no_response)",
 };
 
+// Full class names so Tailwind can see them.
 export const STAGE_BAR: Record<Stage, string> = {
-  prospect: "bg-slate-400",
-  contacted: "bg-sky-500",
-  replied: "bg-cyan-500",
-  in_discussion: "bg-indigo-500",
-  proposal_sent: "bg-violet-500",
-  committed: "bg-emerald-500",
-  paid: "bg-green-600",
-  declined: "bg-rose-500",
-  no_response: "bg-amber-500",
+  prospect: "bg-[var(--st-prospect)]",
+  contacted: "bg-[var(--st-contacted)]",
+  replied: "bg-[var(--st-replied)]",
+  in_discussion: "bg-[var(--st-in_discussion)]",
+  proposal_sent: "bg-[var(--st-proposal_sent)]",
+  committed: "bg-[var(--st-committed)]",
+  paid: "bg-[var(--st-paid)]",
+  declined: "bg-[var(--st-declined)]",
+  no_response: "bg-[var(--st-no_response)]",
 };
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" });

@@ -1,41 +1,159 @@
 @import "tailwindcss";
 
-:root {
-  --background: #f6f7f9;
-  --foreground: #14171c;
-  --card: #ffffff;
-  --muted: #667085;
-  --border: #e3e6eb;
-  --accent: #4338ca;
-  --accent-foreground: #ffffff;
-}
+/* The app is dark only; `dark:` utilities always apply (the <html> element carries .dark). */
+@custom-variant dark (&:where(.dark, .dark *));
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0d0f13;
-    --foreground: #e8eaee;
-    --card: #15181e;
-    --muted: #9aa3b2;
-    --border: #262b33;
-    --accent: #818cf8;
-    --accent-foreground: #0d0f13;
-  }
+:root {
+  --base: #07070c;
+  --heading: #f3efe9;
+  --body: #b4afbd;
+  --faint: #6f6a7c;
+  --glass: rgba(255, 255, 255, 0.055);
+  --glass-strong: rgba(255, 255, 255, 0.09);
+  --glass-border: rgba(255, 255, 255, 0.13);
+  --hairline: rgba(255, 255, 255, 0.07);
+  --panel: rgba(14, 13, 20, 0.72);
+  --scrim-app: linear-gradient(rgba(7, 7, 12, 0.28), rgba(7, 7, 12, 0.62));
+  --action: #f3efe9;
+  --action-fg: #17151d;
+  --ember: linear-gradient(100deg, #ffb347 0%, #ff6b5e 38%, #e6399b 72%, #7a5cff 100%);
+  --danger: #ff5d73;
+  --ok: #3ddc97;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 150ms;
+
+  --st-prospect: #8b93a7;
+  --st-contacted: #4cc2ff;
+  --st-replied: #2ee6c8;
+  --st-in_discussion: #7c8cff;
+  --st-proposal_sent: #b07cff;
+  --st-committed: #3ddc97;
+  --st-paid: #ffd166;
+  --st-declined: #ff5d73;
+  --st-no_response: #c9a26b;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-muted: var(--muted);
-  --color-border: var(--border);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
+  --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-serif: "Instrument Serif", Georgia, serif;
+
+  --color-base: var(--base);
+  --color-heading: var(--heading);
+  --color-body: var(--body);
+  --color-faint: var(--faint);
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+  --color-glass-border: var(--glass-border);
+  --color-hairline: var(--hairline);
+  --color-panel: var(--panel);
+  --color-action: var(--action);
+  --color-action-fg: var(--action-fg);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+
+  /* Aliases so screens that haven't been redesigned yet still read correctly. */
+  --color-background: var(--base);
+  --color-foreground: var(--heading);
+  --color-card: var(--panel);
+  --color-muted: var(--body);
+  --color-border: var(--hairline);
+  --color-accent: var(--action);
+  --color-accent-foreground: var(--action-fg);
+}
+
+html {
+  font-size: clamp(14px, 1.111vw, 18px);
+  background: var(--base);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--base);
+  color: var(--heading);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* No WebGL: a static glow in the same palette. */
+html[data-nogl="1"] body {
+  background:
+    radial-gradient(60% 50% at 70% 20%, rgba(230, 57, 155, 0.22), transparent 70%),
+    radial-gradient(50% 45% at 25% 80%, rgba(255, 179, 71, 0.14), transparent 70%), var(--base);
+}
+
+/* The scrims exist to calm the shader; the static fallback glow needs no dimming. */
+html[data-nogl="1"] [data-scrim] {
+  opacity: 0 !important;
+}
+
+::selection {
+  background: rgba(255, 107, 94, 0.35);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--faint);
+}
+
+/* Lenis */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* Loading skeletons */
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  border-radius: 0.75rem;
+  background: linear-gradient(
+      100deg,
+      transparent 30%,
+      rgba(255, 255, 255, 0.07) 50%,
+      transparent 70%
+    )
+    0 0 / 200% 100%,
+    rgba(255, 255, 255, 0.04);
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.breathe {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+.text-ember {
+  background: var(--ember);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .breathe {
+    animation: none;
+  }
 }

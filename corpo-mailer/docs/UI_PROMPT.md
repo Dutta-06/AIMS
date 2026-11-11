@@ -59,7 +59,7 @@ Serif** word per headline as the accent, and **Geist Mono** for every number.
   --glass-border:    rgba(255,255,255,0.13);
   --hairline:        rgba(255,255,255,0.07);
   --panel:           rgba(14,13,20,0.72);    /* data-dense surfaces: tables, forms */
-  --scrim-app:       linear-gradient(rgba(7,7,12,0.55), rgba(7,7,12,0.84));
+  --scrim-app:       linear-gradient(rgba(7,7,12,0.28), rgba(7,7,12,0.62));
   --action:          #f3efe9;   /* default pill button */
   --action-fg:       #17151d;
   --ember:           linear-gradient(100deg,#ffb347 0%,#ff6b5e 38%,#e6399b 72%,#7a5cff 100%);
@@ -111,7 +111,7 @@ precision highp float;
 uniform vec2  uRes;
 uniform float uTime;
 uniform vec2  uPointer;    // 0..1, smoothed
-uniform float uIntensity;  // 1.0 on the login hero, 0.32 inside the app
+uniform float uIntensity;  // 1.0 on the login hero, 0.55 inside the app
 uniform float uPulse;      // 0..1 progress of the ripple; 1.0 = no ripple
 uniform vec2  uPulseAt;    // 0..1 origin of the ripple (y up)
 
@@ -171,7 +171,7 @@ void main(){
 
 - `uTime` = seconds since mount. `uRes` = drawing-buffer size.
 - `uPointer`: target is the real pointer in 0..1 (y flipped); each frame `current += (target - current) * 0.06`.
-- `uIntensity`: `1.0` on `/login`, `0.32` on every other route, tweened over 900ms with `--ease` when the route changes.
+- `uIntensity`: `1.0` on `/login`, `0.55` on every other route, tweened over 900ms (easeOutCubic) when the route changes. (Built and measured: at 0.32 under the original darker scrim the light was nearly invisible in the app.)
 - **Load burst** (first paint of `/login` only): intensity runs `0 → 1.9` in 500ms, then settles to
   `1.0` over 1400ms; at 250ms fire a pulse from the centre.
 - **Pulse:** `pulse(target)` sets `uPulseAt` to the target's centre and runs `uPulse` `0 → 1` over
@@ -182,9 +182,11 @@ void main(){
 - **Performance:** DPR capped at `min(devicePixelRatio, 1.5)`. On app routes render the buffer at
   0.6× CSS size and at 30fps; on `/login` full size at 60fps. Stop the loop while `document.hidden`.
 - **Fallbacks:** if WebGL is unavailable, hide the canvas and give the body
-  `radial-gradient(60% 50% at 70% 20%, rgba(230,57,155,0.22), transparent 70%), radial-gradient(50% 45% at 25% 80%, rgba(255,179,71,0.14), transparent 70%), var(--base)`.
+  `radial-gradient(60% 50% at 70% 20%, rgba(230,57,155,0.22), transparent 70%), radial-gradient(50% 45% at 25% 80%, rgba(255,179,71,0.14), transparent 70%), var(--base)`,
+  and hide both scrims (they exist to calm the shader, and dim this glow to nothing).
   Under `prefers-reduced-motion: reduce`, draw one frame at `uTime = 20` and stop; pulses become a
-  200ms opacity flash on the triggering control; every reveal below becomes a 150ms fade.
+  200ms opacity flash on the triggering control; every reveal below becomes a 150ms fade **with its
+  delay dropped**, so nothing waits on a stagger.
 
 ## Login: the hero
 
@@ -239,7 +241,7 @@ Split text on spaces into `inline-block` spans. Build one `<Reveal>` and one `<W
   Below 768px the links move to a fixed glass bar at the bottom of the screen.
 - **Page container**: `max-width:76rem; padding:2.5rem 1.25rem 6rem`. Every page opens with a title
   (`font-size:2.4rem; font-weight:500; letter-spacing:-0.02em`, word-revealed, one italic serif word)
-  and a one-line `--body` subtitle. Route changes: content fades out 120ms, the new page staggers in.
+  and a one-line `--body` subtitle. Route changes: the new page fades and slides in (`soft`). There is no exit fade: the App Router swaps the tree immediately, and holding the old one on screen needs a workaround that breaks scroll restoration.
 - **Command palette** (`⌘K` / `Ctrl+K`): a centred glass panel (`width:36rem`, backdrop
   `rgba(7,7,12,0.6)` + blur 6px) with one input, **Search companies, or jump to…** It lists the four
   pages, then companies matching the query (`api.companies.list(q)`, debounced 180ms); each opens
@@ -359,7 +361,7 @@ other tab.
 ## Fixed parameters (bake these in)
 
 - **Copy:** exactly as written above in bold.
-- **Signal:** intensity 1.0 on login, 0.32 in the app, 900ms route tween; burst 0→1.9 (500ms) → 1.0
+- **Signal:** intensity 1.0 on login, 0.55 in the app, 900ms route tween; burst 0→1.9 (500ms) → 1.0
   (1400ms) with a centre pulse at 250ms; pulse 1600ms easeOutCubic; pointer lerp 0.06; DPR cap 1.5;
   app routes 0.6× resolution at 30fps.
 - **Springs:** soft 120/24, snap 420/34. **Hold-to-send:** 1100ms. **Count-up:** 900ms.
