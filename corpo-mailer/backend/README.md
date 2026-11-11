@@ -37,10 +37,10 @@ Email can only leave through `app/services/drafts.py::send_draft`.
 
 `POST /api/v1/drafts/generate` `{deal_id, contact_id, kind: intro|followup|thank_you, instructions?}`
 asks an LLM (OpenRouter, OpenAI-compatible) for a draft and stores it as an **unapproved** draft.
-Set `OPENROUTER_API_KEY`, `LLM_MODELS` (tried in order, so a rate-limited free model falls through
-to the next) and `EVENT_PITCH` in `.env`. The prompt tells the model to use only the facts you
+Set `OPENROUTER_API_KEY`, `LLM_MODELS` (requests rotate round-robin across them, and a failing or
+rate-limited model falls through to the next) and `EVENT_PITCH` in `.env`. The prompt tells the model to use only the facts you
 give it and to leave `[PLACEHOLDER]`s rather than invent details. Free model names change often,
-so check the list at openrouter.ai/models before relying on the default.
+so run `uv run python scripts/list_free_models.py` to get the exact current IDs.
 
 ## Layout
 

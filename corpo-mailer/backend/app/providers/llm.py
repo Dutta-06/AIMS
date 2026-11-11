@@ -1,3 +1,6 @@
+import itertools
+import threading
+
 import httpx
 
 from app.core.config import Settings, get_settings
@@ -5,6 +8,23 @@ from app.core.config import Settings, get_settings
 
 class LLMError(Exception):
     pass
+
+
+# Process-wide so rotation continues across requests (a new client is built per request).
+_counter = itertools.count()
+_counter_lock = threading.Lock()
+
+
+def rotated(models: list[str]) -> list[str]:
+    """Round-robin start point, so free-tier rate limits are spread across models.
+
+    Each call starts one model further along; the rest follow as fallbacks.
+    """
+    if not models:
+        return []
+    with _counter_lock:
+        start = next(_counter) % len(models)
+    return models[start:] + models[:start]
 
 
 class LLM:
@@ -22,7 +42,7 @@ class OpenRouterLLM(LLM):
         if not self.s.openrouter_api_key:
             raise LLMError("OPENROUTER_API_KEY is not configured")
         errors: list[str] = []
-        for model in self.s.llm_models:
+        for model in rotated(self.s.llm_models):
             try:
                 resp = httpx.post(
                     f"{self.s.openrouter_base_url}/chat/completions",
