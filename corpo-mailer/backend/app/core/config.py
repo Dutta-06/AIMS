@@ -20,6 +20,21 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from_name: str = ""
 
+    # LLM drafting via OpenRouter (OpenAI-compatible). Models are tried in order; free models
+    # are rate limited and change often, so keep this list in .env.
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    llm_models: list[str] = ["meta-llama/llama-3.3-70b-instruct:free"]
+    llm_timeout_seconds: float = 60
+
+    # What the AI is allowed to say about the event. It is told to use nothing beyond this.
+    event_name: str = "brAInwave 3"
+    event_pitch: str = (
+        "brAInwave 3 is a hackathon hosted at Delhi Technological University (DTU). "
+        "We are looking for corporate sponsors."
+    )
+    sender_signature: str = ""
+
     # A deal with no contact for this many days counts as needing a follow-up.
     stale_after_days: int = 7
 

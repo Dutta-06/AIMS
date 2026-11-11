@@ -33,6 +33,15 @@ Email can only leave through `app/services/drafts.py::send_draft`.
 * Nothing automated (AI generation, schedulers, reply tracker) has a path to the mailer.
   They can only create drafts, reminders and interactions.
 
+## AI drafting
+
+`POST /api/v1/drafts/generate` `{deal_id, contact_id, kind: intro|followup|thank_you, instructions?}`
+asks an LLM (OpenRouter, OpenAI-compatible) for a draft and stores it as an **unapproved** draft.
+Set `OPENROUTER_API_KEY`, `LLM_MODELS` (tried in order, so a rate-limited free model falls through
+to the next) and `EVENT_PITCH` in `.env`. The prompt tells the model to use only the facts you
+give it and to leave `[PLACEHOLDER]`s rather than invent details. Free model names change often,
+so check the list at openrouter.ai/models before relying on the default.
+
 ## Layout
 
 ```
@@ -42,11 +51,11 @@ app/
   models/      SQLAlchemy tables (company, contact, deal, interaction, draft)
   schemas/     request/response models
   services/    business rules (approval gate)
-  providers/   outside world (SMTP mailer; LLM and IMAP to come)
+  providers/   outside world (SMTP mailer, OpenRouter LLM; IMAP to come)
   api/routes/  thin HTTP layer
 migrations/    Alembic
 ```
 
 ## Not built yet
 
-LLM drafting, reply tracking (IMAP), prospect discovery, templates, CSV import, frontend.
+Reply tracking (IMAP), prospect discovery, templates, CSV import, frontend.

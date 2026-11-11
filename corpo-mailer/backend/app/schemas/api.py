@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.enums import DealStage, DraftStatus, InteractionSource, InteractionType
+from app.services.drafting import DraftKind
 
 
 class ORM(BaseModel):
@@ -149,6 +150,13 @@ class DraftOut(ORM):
     sent_at: datetime | None
     last_error: str | None
     created_at: datetime
+
+
+class GenerateIn(BaseModel):
+    deal_id: int
+    contact_id: int
+    kind: DraftKind = DraftKind.INTRO
+    instructions: str | None = Field(default=None, max_length=1000)
 
 
 # ---- dashboard

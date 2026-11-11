@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.providers.llm import LLM, LLMError, get_llm  # noqa: E402
 from app.providers.mail import MailError, get_mailer  # noqa: E402
 
 
@@ -25,6 +26,24 @@ class FakeMailer:
             raise MailError("smtp down")
         self.sent.append({"to": to, "subject": subject, "body": body})
         return f"<fake-{len(self.sent)}@test>"
+
+
+class FakeLLM(LLM):
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+        self.reply = '{"subject": "Partner with brAInwave 3", "body": "Hi Raj, ..."}'
+        self.fail = False
+
+    def complete(self, *, system, user):
+        self.calls.append({"system": system, "user": user})
+        if self.fail:
+            raise LLMError("all models failed")
+        return self.reply
+
+
+@pytest.fixture
+def llm():
+    return FakeLLM()
 
 
 @pytest.fixture
@@ -43,9 +62,10 @@ def db_session():
 
 
 @pytest.fixture
-def client(db_session, mailer):
+def client(db_session, mailer, llm):
     app.dependency_overrides[get_db] = lambda: db_session
     app.dependency_overrides[get_mailer] = lambda: mailer
+    app.dependency_overrides[get_llm] = lambda: llm
     with TestClient(app) as c:
         token = c.post("/api/v1/auth/login", json={"password": "hunter2", "name": "Asha"}).json()
         c.headers["Authorization"] = f"Bearer {token['access_token']}"

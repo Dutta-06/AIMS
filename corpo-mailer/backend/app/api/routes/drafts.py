@@ -3,12 +3,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_or_404
+from app.core.config import Settings, get_settings
 from app.core.security import current_operator
 from app.db.session import get_db
 from app.models import Contact, Deal, Draft
 from app.models.enums import DraftStatus
+from app.providers.llm import LLM, get_llm
 from app.providers.mail import Mailer, get_mailer
 from app.schemas import api as s
+from app.services import drafting
 from app.services import drafts as svc
 
 router = APIRouter()
@@ -31,6 +34,28 @@ def create_draft(body: s.DraftIn, db: Session = Depends(get_db)):
     db.add(draft)
     db.commit()
     return draft
+
+
+@router.post("/generate", response_model=s.DraftOut, status_code=201)
+def generate(
+    body: s.GenerateIn,
+    db: Session = Depends(get_db),
+    llm: LLM = Depends(get_llm),
+    settings: Settings = Depends(get_settings),
+):
+    """Ask the AI for a draft. It lands as an unapproved draft; sending still needs approval."""
+    deal = get_or_404(db, Deal, body.deal_id)
+    contact = get_or_404(db, Contact, body.contact_id)
+    if contact.company_id != deal.company_id:
+        raise HTTPException(422, "Contact does not belong to this deal's company")
+    if contact.do_not_contact:
+        raise HTTPException(409, "This contact is marked do-not-contact")
+    try:
+        return drafting.generate_draft(
+            db, llm, settings, deal, contact, body.kind, body.instructions
+        )
+    except drafting.GenerationError as exc:
+        raise HTTPException(502, str(exc)) from None
 
 
 @router.get("", response_model=list[s.DraftOut])
