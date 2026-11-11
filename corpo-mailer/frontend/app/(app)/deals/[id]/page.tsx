@@ -10,7 +10,15 @@ import {
 import { api } from "@/lib/api";
 import { STAGE_LABEL, fmtDateTime, fromLocalInput, toLocalInput } from "@/lib/format";
 import { useAction, useQuery } from "@/lib/hooks";
-import { STAGES, type Contact, type Deal, type DraftKind, type InteractionType, type Stage } from "@/lib/types";
+import {
+  STAGES,
+  type Contact,
+  type Deal,
+  type DraftKind,
+  type Interaction,
+  type InteractionType,
+  type Stage,
+} from "@/lib/types";
 
 const TYPE_LABEL: Record<InteractionType, string> = {
   email_sent: "Email sent",
@@ -163,6 +171,40 @@ function LogForm({ dealId, contacts, onDone }: { dealId: number; contacts: Conta
   );
 }
 
+function ReplyBanner({ deal, reply, onDone }: { deal: Deal; reply?: Interaction; onDone: () => void }) {
+  const { busy, error, run } = useAction();
+  const canAdvance = deal.stage === "prospect" || deal.stage === "contacted";
+  const clear = async (stage?: Stage) => {
+    if (await run(() => api.deals.update(deal.id, { reply_unread: false, ...(stage && { stage }) }))) onDone();
+  };
+  return (
+    <Card className="mb-6 space-y-3 border-accent/60">
+      <div>
+        <p className="font-medium">They replied{reply && <> · {fmtDateTime(reply.occurred_at)}</>}</p>
+        {reply?.content && (
+          <blockquote className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap border-l-2 border-accent/50 pl-3 text-sm">
+            {reply.content}
+          </blockquote>
+        )}
+        <p className="mt-2 text-sm text-muted">
+          The stage hasn&apos;t changed. You decide what the reply means.
+        </p>
+      </div>
+      <ErrorNote message={error} />
+      <div className="flex flex-wrap gap-2">
+        {canAdvance && (
+          <Button variant="primary" disabled={busy} onClick={() => clear("replied")}>
+            Move to Replied
+          </Button>
+        )}
+        <Button disabled={busy} onClick={() => clear()}>
+          Mark as seen
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 export default function DealPage() {
   const id = Number(useParams<{ id: string }>().id);
   const { data, error, loading, reload } = useQuery(`deal:${id}`, async () => {
@@ -189,6 +231,14 @@ export default function DealPage() {
         subtitle={`Deal #${deal.id}`}
         actions={<Link href={`/companies/${company.id}`} className="text-sm text-accent hover:underline">Company &amp; contacts →</Link>}
       />
+
+      {deal.reply_unread && (
+        <ReplyBanner
+          deal={deal}
+          reply={[...interactions].reverse().find((i) => i.type === "email_reply")}
+          onDone={reload}
+        />
+      )}
 
       <div className="space-y-8">
         <DealForm

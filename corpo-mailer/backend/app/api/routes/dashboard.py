@@ -35,8 +35,12 @@ def dashboard(db: Session = Depends(get_db), settings: Settings = Depends(get_se
         )
         if d.id not in due_ids
     ]
+    new_replies = db.scalars(
+        select(Deal).where(Deal.reply_unread.is_(True)).order_by(Deal.last_contacted_at.desc())
+    ).all()
     return DashboardOut(
         stage_counts={stage: counts.get(stage, 0) for stage in DealStage},
         followups_due=due,
         stale=stale,
+        new_replies=new_replies,
     )

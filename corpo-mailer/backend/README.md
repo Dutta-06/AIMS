@@ -68,6 +68,32 @@ rate-limited model falls through to the next) and `EVENT_PITCH` in `.env`. The p
 give it and to leave `[PLACEHOLDER]`s rather than invent details. Free model names change often,
 so run `uv run python scripts/list_free_models.py` to get the exact current IDs.
 
+## Reply tracking
+
+The backend watches the sending mailbox over IMAP (read-only: it never marks, moves or deletes
+mail). Set `SMTP_USER`/`SMTP_PASSWORD` (the Gmail app password also works for IMAP; enable IMAP in
+Gmail's settings). It checks every `IMAP_POLL_SECONDS`, and `POST /api/v1/replies/sync` (the
+dashboard's "Check for replies" button) checks immediately.
+
+For each new message:
+
+| It is | What happens |
+| --- | --- |
+| A reply to an email we sent | Logged on that deal as an `email_reply` (auto-detected) and the deal is flagged **unread**. The stage is **not** changed; a person decides. |
+| A bounce | Noted on the deal. A permanent failure (5.x.x) marks the contact do-not-contact so we stop mailing a dead address. |
+| An out-of-office / auto-reply, or mail from our own address | Ignored |
+| Mail from anyone we haven't emailed | Left alone |
+
+**Matching.** A reply is tied to its deal by the `In-Reply-To`/`References` headers against the
+Message-ID we stored when sending. If that fails (some providers rewrite the Message-ID on SMTP),
+it falls back to "the sender is a contact we've emailed", and says so in the log entry. Bounces
+are matched by the failed recipient address, not by Message-ID.
+
+**Safe to repeat.** Each message is stored once (unique Message-ID) and a per-folder cursor
+(`UIDVALIDITY` + last UID) is kept, so re-polling, a reset cursor, or several workers can't
+create duplicates. Tests cover this with a fake mailbox and with a local server speaking the
+IMAP protocol; they have **not** been run against Gmail itself.
+
 ## Layout
 
 ```
@@ -77,11 +103,11 @@ app/
   models/      SQLAlchemy tables (company, contact, deal, interaction, draft)
   schemas/     request/response models
   services/    business rules (approval gate)
-  providers/   outside world (SMTP mailer, OpenRouter LLM; IMAP to come)
+  providers/   outside world (SMTP mailer, OpenRouter LLM, IMAP reader)
   api/routes/  thin HTTP layer
 migrations/    Alembic
 ```
 
 ## Not built yet
 
-Reply tracking (IMAP), prospect discovery, templates, CSV import, frontend.
+Prospect discovery, templates, CSV import.

@@ -44,6 +44,7 @@ export type Deal = {
   next_followup_at: string | null;
   last_contacted_at: string | null;
   notes: string | null;
+  reply_unread: boolean;
   created_at: string;
 };
 
@@ -84,4 +85,20 @@ export type Dashboard = {
   stage_counts: Record<Stage, number>;
   followups_due: Deal[];
   stale: Deal[];
+  new_replies: Deal[];
+};
+
+export type SyncResult = {
+  fetched: number;
+  replies: number;
+  bounces: number;
+  ignored: number;
+  unmatched: number;
+};
+
+export type ReplyStatus = {
+  configured: boolean;
+  polling: boolean;
+  last_sync_at: string | null;
+  last_error: string | null;
 };

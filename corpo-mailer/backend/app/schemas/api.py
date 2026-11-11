@@ -87,6 +87,7 @@ class DealUpdate(BaseModel):
     committed_amount: int | None = Field(default=None, ge=0)
     next_followup_at: datetime | None = None
     notes: str | None = None
+    reply_unread: bool | None = None
 
 
 class DealOut(ORM):
@@ -99,6 +100,7 @@ class DealOut(ORM):
     next_followup_at: datetime | None
     last_contacted_at: datetime | None
     notes: str | None
+    reply_unread: bool
     created_at: datetime
 
 
@@ -164,3 +166,19 @@ class DashboardOut(BaseModel):
     stage_counts: dict[DealStage, int]
     followups_due: list[DealOut]
     stale: list[DealOut]
+    new_replies: list[DealOut]
+
+
+class SyncOut(BaseModel):
+    fetched: int
+    replies: int
+    bounces: int
+    ignored: int
+    unmatched: int
+
+
+class ReplyStatusOut(BaseModel):
+    configured: bool
+    polling: bool
+    last_sync_at: datetime | None
+    last_error: str | None

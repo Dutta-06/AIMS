@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, DealLink, ErrorNote, Loading, PageHeader, Select } from "@/components/ui";
+import { Card, DealLink, ErrorNote, Loading, PageHeader, Pill, Select } from "@/components/ui";
 import { api } from "@/lib/api";
 import { STAGE_BAR, STAGE_LABEL, daysAgo, fmtDate, fmtMoney } from "@/lib/format";
 import { useAction, useQuery } from "@/lib/hooks";
@@ -48,7 +48,10 @@ export default function PipelinePage() {
                 )}
                 {deals.map((d) => (
                   <Card key={d.id} className="space-y-2 p-3">
-                    <DealLink id={d.id}>{data.name.get(d.company_id) ?? `Deal ${d.id}`}</DealLink>
+                    <div className="flex items-center justify-between gap-2">
+                      <DealLink id={d.id}>{data.name.get(d.company_id) ?? `Deal ${d.id}`}</DealLink>
+                      {d.reply_unread && <Pill tone="green">New reply</Pill>}
+                    </div>
                     <p className="text-xs text-muted">
                       {d.target_amount != null && <>Target {fmtMoney(d.target_amount)} · </>}
                       {d.last_contacted_at

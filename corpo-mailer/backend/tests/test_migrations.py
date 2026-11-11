@@ -50,3 +50,25 @@ def test_downgrade_to_base_removes_everything(migrated_url):
     command.downgrade(cfg(), "base")
     tables = set(inspect(create_engine(migrated_url)).get_table_names())
     assert not (set(Base.metadata.tables) & tables)
+
+
+def test_upgrading_a_database_that_already_has_data(migrated_url):
+    """The reply-tracking migration must keep existing rows and default reply_unread to false."""
+    command.upgrade(cfg(), "b3451241eebb")  # schema as it was before reply tracking
+    engine = create_engine(migrated_url)
+    with engine.begin() as conn:
+        conn.execute(
+            text("INSERT INTO companies (id, name, created_at) VALUES (1, 'Acme', '2026-01-01')")
+        )
+        conn.execute(
+            text(
+                "INSERT INTO deals (id, company_id, stage, created_at) "
+                "VALUES (1, 1, 'prospect', '2026-01-01')"
+            )
+        )
+    command.upgrade(cfg(), "head")
+    with engine.connect() as conn:
+        assert conn.execute(text("SELECT reply_unread FROM deals WHERE id = 1")).scalar() in (
+            False,
+            0,
+        )

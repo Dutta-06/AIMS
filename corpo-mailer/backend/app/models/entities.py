@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, UTCDateTime, utcnow
@@ -59,6 +59,8 @@ class Deal(Base):
     next_followup_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     last_contacted_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     notes: Mapped[str | None] = mapped_column(Text)
+    # Set when the reply tracker logs a new reply; cleared by a person marking it seen.
+    reply_unread: Mapped[bool] = mapped_column(default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
     company: Mapped[Company] = relationship(back_populates="deals")
@@ -80,7 +82,7 @@ class Interaction(Base):
     subject: Mapped[str | None] = mapped_column(String(500))
     content: Mapped[str | None] = mapped_column(Text)
     # RFC 5322 Message-ID of a sent email; the reply tracker matches In-Reply-To against it.
-    message_id: Mapped[str | None] = mapped_column(String(500), index=True)
+    message_id: Mapped[str | None] = mapped_column(String(500), unique=True, index=True)
     # Set on email_sent interactions: which draft, and who approved it.
     draft_id: Mapped[int | None] = mapped_column(ForeignKey("drafts.id", ondelete="SET NULL"))
     approved_by: Mapped[str | None] = mapped_column(String(100))
@@ -108,3 +110,15 @@ class Draft(Base):
     sent_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class MailboxState(Base):
+    """Where the reply tracker left off in each mailbox folder, and how the last sync went."""
+
+    __tablename__ = "mailbox_state"
+
+    folder: Mapped[str] = mapped_column(String(200), primary_key=True)
+    uidvalidity: Mapped[int | None] = mapped_column(Integer)
+    last_uid: Mapped[int] = mapped_column(Integer, default=0)
+    last_sync_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    last_error: Mapped[str | None] = mapped_column(Text)

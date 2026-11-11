@@ -9,10 +9,11 @@ from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
-from app.core.config import Settings  # noqa: E402
+from app.core.config import Settings, get_settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.providers.imap import Fetched, MailboxError, get_mailbox  # noqa: E402
 from app.providers.llm import LLM, LLMError, get_llm  # noqa: E402
 from app.providers.mail import MailError, get_mailer  # noqa: E402
 
@@ -40,6 +41,38 @@ class FakeLLM(LLM):
         if self.fail:
             raise LLMError("all models failed")
         return self.reply
+
+
+class FakeMailbox:
+    """Stands in for IMAP. Put messages in `inbox`; `fetch` hands back those past the cursor."""
+
+    def __init__(self) -> None:
+        self.inbox: list = []
+        self.uidvalidity = 1
+        self.fail: str | None = None
+        self.calls: list[dict] = []
+
+    def fetch(self, *, uidvalidity, last_uid, lookback_days):
+        self.calls.append({"uidvalidity": uidvalidity, "last_uid": last_uid})
+        if self.fail:
+            raise MailboxError(self.fail)
+        base = last_uid if uidvalidity == self.uidvalidity else 0
+        return Fetched(self.uidvalidity, [m for m in self.inbox if m.uid > base])
+
+
+@pytest.fixture
+def mailbox():
+    return FakeMailbox()
+
+
+@pytest.fixture
+def imap_settings():
+    return Settings(
+        secret_key=os.environ["SECRET_KEY"],
+        app_password=os.environ["APP_PASSWORD"],
+        smtp_user="us@gmail.com",
+        smtp_password="app-pw",
+    )
 
 
 @pytest.fixture
@@ -78,10 +111,12 @@ def db_session():
 
 
 @pytest.fixture
-def client(db_session, mailer, llm):
+def client(db_session, mailer, llm, mailbox, imap_settings):
     app.dependency_overrides[get_db] = lambda: db_session
     app.dependency_overrides[get_mailer] = lambda: mailer
     app.dependency_overrides[get_llm] = lambda: llm
+    app.dependency_overrides[get_mailbox] = lambda: mailbox
+    app.dependency_overrides[get_settings] = lambda: imap_settings
     with TestClient(app) as c:
         token = c.post("/api/v1/auth/login", json={"password": "hunter2", "name": "Asha"}).json()
         c.headers["Authorization"] = f"Bearer {token['access_token']}"

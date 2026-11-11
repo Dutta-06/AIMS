@@ -21,6 +21,24 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from_name: str = ""
 
+    # Reply tracking over IMAP. Credentials default to the SMTP ones (same Gmail app password).
+    imap_host: str = "imap.gmail.com"
+    imap_port: int = 993
+    imap_user: str = ""
+    imap_password: str = ""
+    imap_folder: str = "INBOX"
+    imap_poll_seconds: int = 300  # 0 turns background polling off (manual sync still works)
+    imap_lookback_days: int = 14  # how far back to look on the first run
+
+    @property
+    def imap_login(self) -> tuple[str, str]:
+        return (self.imap_user or self.smtp_user, self.imap_password or self.smtp_password)
+
+    @property
+    def imap_configured(self) -> bool:
+        user, password = self.imap_login
+        return bool(user and password)
+
     @field_validator("database_url")
     @classmethod
     def _use_psycopg3(cls, url: str) -> str:

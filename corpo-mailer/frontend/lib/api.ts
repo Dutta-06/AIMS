@@ -10,7 +10,9 @@ import type {
   DraftStatus,
   Interaction,
   InteractionType,
+  ReplyStatus,
   Stage,
+  SyncResult,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -70,7 +72,13 @@ export type ContactInput = { company_id: number; name: string; email: string; ro
 export type DealPatch = Partial<
   Pick<
     Deal,
-    "stage" | "owner" | "target_amount" | "committed_amount" | "next_followup_at" | "notes"
+    | "stage"
+    | "owner"
+    | "target_amount"
+    | "committed_amount"
+    | "next_followup_at"
+    | "notes"
+    | "reply_unread"
   >
 >;
 
@@ -78,6 +86,11 @@ export const api = {
   login: (password: string, name: string) =>
     request<{ access_token: string }>("/auth/login", { method: "POST", ...json({ password, name }) }),
   dashboard: () => request<Dashboard>("/dashboard"),
+
+  replies: {
+    status: () => request<ReplyStatus>("/replies/status"),
+    sync: () => request<SyncResult>("/replies/sync", { method: "POST" }),
+  },
 
   companies: {
     list: (q?: string) => request<Company[]>(`/companies${qs({ q })}`),

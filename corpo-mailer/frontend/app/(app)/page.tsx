@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import ReplyCheck from "@/components/ReplyCheck";
 import { Card, DealLink, Empty, ErrorNote, Loading, PageHeader, SectionTitle, StageBadge } from "@/components/ui";
 import { api } from "@/lib/api";
 import { STAGE_BAR, STAGE_LABEL, daysAgo, fmtDate, fmtMoney } from "@/lib/format";
@@ -8,13 +9,14 @@ import { useQuery } from "@/lib/hooks";
 import { CLOSED_STAGES, STAGES, type Deal } from "@/lib/types";
 
 async function load() {
-  const [dash, deals, companies, drafts] = await Promise.all([
+  const [dash, deals, companies, drafts, replyStatus] = await Promise.all([
     api.dashboard(),
     api.deals.list(),
     api.companies.list(),
     api.drafts.list(),
+    api.replies.status(),
   ]);
-  return { dash, deals, companies, drafts };
+  return { dash, deals, companies, drafts, replyStatus };
 }
 
 function Tile({ label, value, hint, href }: { label: string; value: string | number; hint?: string; href?: string }) {
@@ -29,11 +31,11 @@ function Tile({ label, value, hint, href }: { label: string; value: string | num
 }
 
 export default function DashboardPage() {
-  const { data, error, loading } = useQuery("dashboard", load);
+  const { data, error, loading, reload } = useQuery("dashboard", load);
   if (loading) return <Loading />;
   if (error || !data) return <ErrorNote message={error} />;
 
-  const { dash, deals, companies, drafts } = data;
+  const { dash, deals, companies, drafts, replyStatus } = data;
   const name = new Map(companies.map((c) => [c.id, c.name]));
   const open = deals.filter((d) => !CLOSED_STAGES.includes(d.stage));
   const committed = deals.reduce((s, d) => s + (d.committed_amount ?? 0), 0);
@@ -53,7 +55,11 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" subtitle="Who needs attention, and where every sponsor stands." />
+      <PageHeader
+        title="Dashboard"
+        subtitle="Who needs attention, and where every sponsor stands."
+        actions={<ReplyCheck status={replyStatus} onDone={reload} />}
+      />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile label="Open deals" value={open.length} hint={`${deals.length} total`} href="/pipeline" />
@@ -69,6 +75,19 @@ export default function DashboardPage() {
           hint={pipelineTarget ? `${fmtMoney(pipelineTarget)} targeted in open deals` : undefined}
         />
       </div>
+
+      {dash.new_replies.length > 0 && (
+        <section className="mt-8">
+          <SectionTitle>New replies</SectionTitle>
+          <Card className="border-accent/50">
+            <ul className="divide-y divide-border">
+              {dash.new_replies.map((d) =>
+                row(d, `Replied ${daysAgo(d.last_contacted_at) === 0 ? "today" : fmtDate(d.last_contacted_at)}`),
+              )}
+            </ul>
+          </Card>
+        </section>
+      )}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <section>
