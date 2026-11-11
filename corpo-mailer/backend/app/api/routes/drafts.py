@@ -1,0 +1,73 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.api.deps import get_or_404
+from app.core.security import current_operator
+from app.db.session import get_db
+from app.models import Contact, Deal, Draft
+from app.models.enums import DraftStatus
+from app.providers.mail import Mailer, get_mailer
+from app.schemas import api as s
+from app.services import drafts as svc
+
+router = APIRouter()
+
+
+def _guard(fn, *args):
+    try:
+        return fn(*args)
+    except svc.DraftError as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
+@router.post("", response_model=s.DraftOut, status_code=201)
+def create_draft(body: s.DraftIn, db: Session = Depends(get_db)):
+    deal = get_or_404(db, Deal, body.deal_id)
+    contact = get_or_404(db, Contact, body.contact_id)
+    if contact.company_id != deal.company_id:
+        raise HTTPException(422, "Contact does not belong to this deal's company")
+    draft = Draft(**body.model_dump())
+    db.add(draft)
+    db.commit()
+    return draft
+
+
+@router.get("", response_model=list[s.DraftOut])
+def list_drafts(
+    status: DraftStatus | None = None, deal_id: int | None = None, db: Session = Depends(get_db)
+):
+    stmt = select(Draft).order_by(Draft.created_at.desc())
+    if status is not None:
+        stmt = stmt.where(Draft.status == status)
+    if deal_id is not None:
+        stmt = stmt.where(Draft.deal_id == deal_id)
+    return db.scalars(stmt).all()
+
+
+@router.get("/{draft_id}", response_model=s.DraftOut)
+def get_draft(draft_id: int, db: Session = Depends(get_db)):
+    return get_or_404(db, Draft, draft_id)
+
+
+@router.patch("/{draft_id}", response_model=s.DraftOut)
+def edit_draft(draft_id: int, body: s.DraftUpdate, db: Session = Depends(get_db)):
+    draft = get_or_404(db, Draft, draft_id)
+    return _guard(svc.edit_draft, db, draft, body.subject, body.body)
+
+
+@router.post("/{draft_id}/approve", response_model=s.DraftOut)
+def approve(
+    draft_id: int, db: Session = Depends(get_db), operator: str = Depends(current_operator)
+):
+    return _guard(svc.approve_draft, db, get_or_404(db, Draft, draft_id), operator)
+
+
+@router.post("/{draft_id}/revoke", response_model=s.DraftOut)
+def revoke(draft_id: int, db: Session = Depends(get_db)):
+    return _guard(svc.revoke_approval, db, get_or_404(db, Draft, draft_id))
+
+
+@router.post("/{draft_id}/send", response_model=s.DraftOut)
+def send(draft_id: int, db: Session = Depends(get_db), mailer: Mailer = Depends(get_mailer)):
+    return _guard(svc.send_draft, db, get_or_404(db, Draft, draft_id), mailer)
