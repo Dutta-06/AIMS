@@ -9,6 +9,8 @@ from app.models.enums import (
     DraftStatus,
     InteractionSource,
     InteractionType,
+    ProspectState,
+    Verdict,
 )
 from app.services.drafting import DraftKind
 
@@ -199,3 +201,63 @@ class ReplyStatusOut(BaseModel):
 
 
 EMAIL_RE = re.compile(r"[\w.+'-]+@[\w-]+(?:\.[\w-]+)+")
+
+
+# ---- discovery
+class EvidenceOut(BaseModel):
+    url: str
+    title: str = ""
+    kind: str = "page"
+    snippet: str = ""
+    fetched_at: str | None = None
+    last_modified: str | None = None
+    signal: bool = False
+
+
+class FoundEmail(BaseModel):
+    email: str
+    source_url: str
+
+
+class ProspectOut(ORM):
+    id: int
+    name: str
+    website: str | None
+    domain: str | None
+    industry: str | None
+    why: str | None
+    state: ProspectState
+    verdict: Verdict
+    verdict_note: str | None
+    checked_at: datetime | None
+    expires_at: datetime | None
+    snoozed_until: datetime | None
+    stale: bool
+    evidence: list[EvidenceOut]
+    emails: list[FoundEmail]
+    linkedin_search_url: str
+    company_id: int | None
+    created_at: datetime
+
+
+class SuggestIn(BaseModel):
+    count: int = Field(default=8, ge=1, le=20)
+    focus: str | None = Field(default=None, max_length=300)
+
+
+class SuggestOut(BaseModel):
+    added: list[ProspectOut]
+    skipped_duplicates: int
+
+
+class VerifyIn(BaseModel):
+    website: str | None = Field(default=None, max_length=300, description="Correct the address")
+
+
+class SnoozeIn(BaseModel):
+    days: int = Field(default=30, ge=1, le=365)
+
+
+class AcceptOut(BaseModel):
+    company_id: int
+    prospect: ProspectOut

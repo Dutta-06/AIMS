@@ -13,6 +13,7 @@ from app.main import app
 from app.providers.imap import Fetched, MailboxError, get_mailbox
 from app.providers.llm import LLM, LLMError, get_llm
 from app.providers.mail import MailError, get_mailer
+from app.providers.web import Page, get_fetcher
 
 
 @pytest.fixture(autouse=True)
@@ -49,6 +50,37 @@ class FakeLLM(LLM):
         return self.reply
 
 
+class FakeFetcher:
+    """A pretend web. `pages` maps a URL to a Page, or to a FetchError to raise; unknown URLs
+    answer 404. `calls` records every URL asked for."""
+
+    def __init__(self) -> None:
+        self.pages: dict = {}
+        self.calls: list[str] = []
+
+    def fetch(self, url):
+        self.calls.append(url)
+        hit = self.pages.get(url)
+        if isinstance(hit, Exception):
+            raise hit
+        if hit is None:
+            return Page(url=url, final_url=url, status=404, text="Not found")
+        return hit
+
+
+def page(url, text="", *, title="", status=200, final_url=None, links=(), emails=(), modified=None):
+    return Page(
+        url=url,
+        final_url=final_url or url,
+        status=status,
+        title=title,
+        text=text,
+        links=list(links),
+        emails=list(emails),
+        last_modified=modified,
+    )
+
+
 class FakeMailbox:
     """Stands in for IMAP. Put messages in `inbox`; `fetch` hands back those past the cursor."""
 
@@ -69,6 +101,11 @@ class FakeMailbox:
 @pytest.fixture
 def mailer():
     return FakeMailer()
+
+
+@pytest.fixture
+def fetcher():
+    return FakeFetcher()
 
 
 @pytest.fixture
@@ -110,11 +147,12 @@ def db_session():
 
 
 @pytest.fixture
-def client(db_session, mailer, llm, mailbox, imap_settings):
+def client(db_session, mailer, llm, mailbox, fetcher, imap_settings):
     app.dependency_overrides[get_db] = lambda: db_session
     app.dependency_overrides[get_mailer] = lambda: mailer
     app.dependency_overrides[get_llm] = lambda: llm
     app.dependency_overrides[get_mailbox] = lambda: mailbox
+    app.dependency_overrides[get_fetcher] = lambda: fetcher
     app.dependency_overrides[get_settings] = lambda: imap_settings
     with TestClient(app) as c:
         c.headers["X-Corpo-Mailer"] = "1"  # what the real frontend sends on every request

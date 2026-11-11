@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import crm, dashboard, drafts, imports, replies
+from app.api.routes import crm, dashboard, discovery, drafts, imports, replies
 from app.core.config import get_settings
 from app.core.guard import RequestGuard
 from app.services.poller import poll_forever
@@ -38,6 +38,7 @@ def create_app() -> FastAPI:
     app.include_router(drafts.router, prefix=f"{p}/drafts", tags=["drafts"])
     app.include_router(replies.router, prefix=f"{p}/replies", tags=["replies"])
     app.include_router(dashboard.router, prefix=f"{p}/dashboard", tags=["dashboard"])
+    app.include_router(discovery.router, prefix=f"{p}/discovery", tags=["discovery"])
 
     @app.get("/health")
     def health():

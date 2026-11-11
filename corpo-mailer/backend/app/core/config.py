@@ -67,6 +67,8 @@ class Settings(BaseSettings):
 
     # A contacted lead with no reply for this many days counts as needing a follow-up.
     stale_after_days: int = 7
+    # A verified prospect must be re-checked after this long before it can be accepted.
+    prospect_recheck_days: int = 30
 
 
 @lru_cache

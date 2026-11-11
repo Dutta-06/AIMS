@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import quote
 
 from sqlalchemy import JSON, ForeignKey, String, Text, false
 from sqlalchemy import Enum as SAEnum
@@ -11,6 +12,8 @@ from app.models.enums import (
     DraftStatus,
     InteractionSource,
     InteractionType,
+    ProspectState,
+    Verdict,
 )
 
 
@@ -123,3 +126,40 @@ class MailboxState(Base):
     last_uid: Mapped[int] = mapped_column(default=0)
     last_sync_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
     last_error: Mapped[str | None] = mapped_column(Text)
+
+
+class Prospect(Base):
+    """A company the model suggested. It is only a suggestion until it is checked against the live
+    web and a human accepts it; nothing here is ever contacted."""
+
+    __tablename__ = "prospects"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    website: Mapped[str | None] = mapped_column(String(300))
+    domain: Mapped[str | None] = mapped_column(String(200), index=True)
+    industry: Mapped[str | None] = mapped_column(String(100))
+    why: Mapped[str | None] = mapped_column(Text)  # the model's reason: untrusted text
+    state: Mapped[ProspectState] = mapped_column(_enum(ProspectState), default=ProspectState.NEW)
+    verdict: Mapped[Verdict] = mapped_column(_enum(Verdict), default=Verdict.UNVERIFIED)
+    verdict_note: Mapped[str | None] = mapped_column(Text)  # plain-language reason for the verdict
+    checked_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime)  # re-check after this
+    snoozed_until: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    # [{"url","title","snippet","kind","fetched_at","last_modified"}]: what we actually saw
+    evidence: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    # [{"email","source_url"}]: only addresses found written on the company's own pages
+    emails: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+    @property
+    def stale(self) -> bool:
+        """Checked once, but long enough ago that the answer may no longer be true."""
+        return self.expires_at is not None and self.expires_at < utcnow()
+
+    @property
+    def linkedin_search_url(self) -> str:
+        """A people search for the right contact. We open it for a human; we never scrape it."""
+        words = f"{self.name} university relations OR partnerships OR sponsorship"
+        return "https://www.linkedin.com/search/results/people/?keywords=" + quote(words)

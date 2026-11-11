@@ -35,3 +35,17 @@ class DraftStatus(StrEnum):
     APPROVED = "approved"
     SENDING = "sending"
     SENT = "sent"
+
+
+class ProspectState(StrEnum):
+    NEW = "new"  # waiting for a human to look
+    ACCEPTED = "accepted"  # became a company and lead in the tracker
+    REJECTED = "rejected"  # never suggest again
+    SNOOZED = "snoozed"  # hidden until snoozed_until
+
+
+class Verdict(StrEnum):
+    UNVERIFIED = "unverified"  # suggested by the model, not yet checked against the live web
+    VERIFIED = "verified"  # site is live, is this company, and shows an outreach signal
+    NEEDS_CHECK = "needs_check"  # site is live and is this company, but a human must judge
+    FAILED = "failed"  # couldn't confirm it exists (dead site, wrong company, blocked)

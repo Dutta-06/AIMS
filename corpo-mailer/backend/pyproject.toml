@@ -27,6 +27,8 @@ extend-exclude = ["migrations"]
 [tool.ruff.lint.per-file-ignores]
 # Test fixtures (CSV sheets, long emails) read better unwrapped.
 "tests/*" = ["E501"]
+# Messages shown to people are kept as single readable strings.
+"app/services/discovery.py" = ["E501"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

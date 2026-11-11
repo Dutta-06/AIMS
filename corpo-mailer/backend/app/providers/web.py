@@ -34,6 +34,10 @@ class FetchError(Exception):
     """A page could not be fetched; the message is safe to show."""
 
 
+class RobotsBlocked(FetchError):
+    """The site's robots.txt asks bots to stay away, so we didn't look."""
+
+
 @dataclass
 class Page:
     url: str  # what we asked for
@@ -211,7 +215,7 @@ class HttpFetcher:
         url = validate_public_url(url, allow_private=self.allow_private)
         with httpx.Client(timeout=self.timeout, follow_redirects=False) as client:
             if not self._allowed(client, url):
-                raise FetchError("The site's robots.txt asks bots not to read this page")
+                raise RobotsBlocked("The site's robots.txt asks bots not to read this page")
             r, body, final = self._get(client, url)
         ctype = r.headers.get("content-type", "").split(";")[0].strip().lower()
         page = Page(
@@ -226,3 +230,7 @@ class HttpFetcher:
                 body.decode(enc, "replace"), final
             )
         return page
+
+
+def get_fetcher() -> PageFetcher:
+    return HttpFetcher()
