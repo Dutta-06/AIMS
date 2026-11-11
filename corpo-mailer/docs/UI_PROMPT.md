@@ -269,6 +269,12 @@ Split text on spaces into `inline-block` spans. Build one `<Reveal>` and one `<W
 - **New replies** (only when present; the one section with a 1px `var(--ember)` gradient border):
   rows of company, "Replied today / 10 Nov", stage chip.
 - **Follow up now**: the same row pattern, with "Follow-up was due …" or "No contact for N days".
+- **Build notes learned the hard way:** a gradient *border* is a gradient `div` with `p-px` around
+  a separate **opaque** inner surface (never the shared translucent `Card`, or the gradient fills
+  the whole panel); stat numbers shrink on narrow tiles (`1.75rem` below 640px, `2.2rem` at 1024px)
+  so `₹7,50,000` never clips; under reduced motion the count-up paints the real number on the
+  first frame; word reveals key by index so a changed word (3 → 4) updates in place; and the
+  reply-check dot is neutral until a check has actually succeeded.
 - **Pipeline funnel**: one row per stage: name, a `0.5rem` track whose fill is the stage colour and
   **grows from 0** on reveal (700ms, 50ms stagger), and a mono count.
 - **Stage chip** (used everywhere): pill, `font-size:0.72rem; font-weight:500`, text in the stage

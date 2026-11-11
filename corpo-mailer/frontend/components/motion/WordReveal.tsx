@@ -35,7 +35,7 @@ export default function WordReveal({
         const isAccent = accent.includes(word);
         return (
           <motion.span
-            key={`${word}-${i}`}
+            key={i}
             aria-hidden="true"
             className={`inline-block ${isAccent ? "font-serif font-normal italic tracking-[-0.01em] text-ember" : ""}`}
             initial={{ opacity: 0, y: reduce ? 0 : rise }}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useSignal } from "@/components/signal/SignalProvider";
 import { Button } from "@/components/ui";
 import { api } from "@/lib/api";
 import { daysAgo, fmtDateTime } from "@/lib/format";
@@ -23,41 +24,54 @@ function age(iso: string): string {
   return days < 1 ? `${Math.floor(mins / 60)} h ago` : fmtDateTime(iso);
 }
 
-/** Manual "check now" for reply tracking, plus whether the automatic check is healthy. */
+/** Manual "check now" for reply tracking, with a dot showing whether the automatic check is healthy. */
 export default function ReplyCheck({ status, onDone }: { status: ReplyStatus; onDone: () => void }) {
   const { busy, error, run } = useAction();
+  const signal = useSignal();
+  const button = useRef<HTMLButtonElement>(null);
   const [result, setResult] = useState<string | null>(null);
 
-  if (!status.configured) {
-    return (
-      <p className="max-w-xs text-right text-xs text-muted">
-        Reply tracking is off. Add the Gmail app password (IMAP) to the backend settings, or log
-        replies by hand on each deal.
-      </p>
-    );
-  }
+  const failing = Boolean(error || status.last_error);
+  const checked = Boolean(status.last_sync_at);
+  const dot = !status.configured || (!checked && !failing) ? "bg-faint" : failing ? "bg-danger" : "bg-ok";
+
+  const line = !status.configured
+    ? "Reply tracking is off. Add the Gmail app password to the backend, or log replies by hand."
+    : (error ??
+      result ??
+      (status.last_error
+        ? `Last check failed: ${status.last_error}`
+        : status.last_sync_at
+          ? `Checked ${age(status.last_sync_at)}${status.polling ? " · checks automatically" : ""}`
+          : "Not checked yet"));
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <Button
-        disabled={busy}
-        onClick={async () => {
-          setResult(null);
-          const ok = await run(async () => setResult(summary(await api.replies.sync())));
-          onDone();
-          if (!ok) setResult(null);
-        }}
+    <div className="flex flex-col items-start gap-2 sm:items-end">
+      {status.configured && (
+        <Button
+          ref={button}
+          disabled={busy}
+          onClick={async () => {
+            setResult(null);
+            let found = false;
+            const ok = await run(async () => {
+              const r = await api.replies.sync();
+              setResult(summary(r));
+              found = r.replies > 0 || r.bounces > 0;
+            });
+            if (ok && found) signal.pulse(button.current); // the light answers when something arrived
+            onDone();
+          }}
+        >
+          {busy ? "Checking…" : "Check for replies"}
+        </Button>
+      )}
+      <p
+        aria-live="polite"
+        className={`flex max-w-xs items-center gap-2 text-xs sm:justify-end ${failing ? "text-danger" : "text-body"}`}
       >
-        {busy ? "Checking…" : "Check for replies"}
-      </Button>
-      <p className={`max-w-xs text-right text-xs ${error || status.last_error ? "text-rose-600" : "text-muted"}`}>
-        {error ??
-          result ??
-          (status.last_error
-            ? `Last check failed: ${status.last_error}`
-            : status.last_sync_at
-              ? `Checked ${age(status.last_sync_at)}${status.polling ? " · checks automatically" : ""}`
-              : "Not checked yet")}
+        <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+        {line}
       </p>
     </div>
   );
