@@ -516,3 +516,176 @@ def test_extracted_candidates_then_go_through_the_same_verification(client, fetc
     p = from_page(client).json()["added"][0]
     good_site(fetcher)
     assert client.post(f"{API}/{p['id']}/verify").json()["verdict"] == "verified"
+
+
+# ------------------------------------------------------------------ enriching companies
+def make_company(client, name="Acme Robotics", website=None, industry="Robotics"):
+    body = {"name": name, "industry": industry, **({"website": website} if website else {})}
+    return client.post("/api/v1/companies", json=body).json()
+
+
+def track(db_session, company, email):
+    """A tracked contact, inserted directly (the API rejects the reserved .test domain)."""
+    from app.models import Contact
+
+    db_session.add(Contact(company_id=company["id"], email=email))
+    db_session.commit()
+
+
+def enrich(client, company):
+    return client.post(f"{API}/enrich/{company['id']}")
+
+
+def test_a_known_website_is_read_and_public_inboxes_are_reported_with_sources(client, fetcher, llm):
+    co = make_company(client, website="https://acme.test/")
+    good_site(fetcher)
+    r = enrich(client, co).json()
+    assert (r["verdict"], r["website"], r["website_is_new"]) == (
+        "verified",
+        "https://acme.test/",
+        False,
+    )
+    assert {(e["email"], e["source_url"], e["already_tracked"]) for e in r["emails"]} == {
+        ("info@acme.test", "https://acme.test/", False),
+        ("partnerships@acme.test", "https://acme.test/community", False),
+    }
+    assert {e["kind"] for e in r["evidence"]} == {"homepage", "community"}
+    assert r["linkedin_search_url"].startswith("https://www.linkedin.com/search/results/people/")
+    assert llm.calls == []  # a known website needs no model
+    assert (
+        client.get("/api/v1/contacts", params={"company_id": co["id"]}).json() == []
+    )  # nothing saved
+
+
+def test_inboxes_already_in_the_tracker_are_marked(client, fetcher, db_session):
+    co = make_company(client, website="https://acme.test/")
+    track(db_session, co, "Info@Acme.test")
+    good_site(fetcher)
+    flags = {e["email"]: e["already_tracked"] for e in enrich(client, co).json()["emails"]}
+    assert flags == {"info@acme.test": True, "partnerships@acme.test": False}
+
+
+def test_a_missing_website_is_guessed_by_the_model_but_only_proposed_if_confirmed(
+    client, fetcher, llm
+):
+    co = make_company(client)
+    good_site(fetcher)
+    llm.reply = '{"website": "https://acme.test"}'
+    r = enrich(client, co).json()
+    assert (r["website"], r["website_is_new"], r["verdict"]) == (
+        "https://acme.test/",
+        True,
+        "verified",
+    )
+    assert "Acme Robotics" in llm.calls[0]["user"]
+
+
+def test_a_guess_that_points_at_the_wrong_company_is_thrown_away(client, fetcher, llm):
+    co = make_company(client)
+    fetcher.pages["https://acme.test/"] = page(
+        "https://acme.test/", "A shop selling shoes. sponsor", title="Shoes"
+    )
+    llm.reply = '{"website": "acme.test"}'
+    r = enrich(client, co).json()
+    assert r["website"] is None and r["website_is_new"] is False and r["verdict"] == "failed"
+    assert "couldn't confirm it" in r["verdict_note"] and r["emails"] == [] and r["evidence"] == []
+
+
+def test_guesses_that_cannot_be_confirmed_are_not_proposed(client, fetcher, llm):
+    co = make_company(client)
+    llm.reply = '{"website": "acme.test"}'
+    for hit in (RobotsBlocked("robots"), page("https://acme.test/", "Forbidden", status=403)):
+        fetcher.pages["https://acme.test/"] = hit
+        assert enrich(client, co).json()["website"] is None  # not read, so not confirmed
+
+
+def test_no_guess_means_no_website_and_a_plain_note(client, fetcher, llm):
+    co = make_company(client)
+    for reply in (
+        '{"website": ""}',
+        "I don't know",
+        "not json",
+        '{"website": "https://twitter.com/acme"}',
+    ):
+        llm.reply = reply
+        r = enrich(client, co).json()
+        assert r["website"] is None and "couldn't suggest one" in r["verdict_note"]
+    assert fetcher.calls == []
+
+
+def test_model_failure_is_a_clear_error(client, llm):
+    co = make_company(client)
+    llm.fail = True
+    assert enrich(client, co).status_code == 502
+
+
+def test_unknown_company_is_404(client):
+    assert client.post(f"{API}/enrich/999").status_code == 404
+
+
+def test_applying_saves_only_the_chosen_inboxes_and_website(client, fetcher, llm):
+    co = make_company(client)
+    good_site(fetcher)
+    llm.reply = '{"website": "acme.test"}'
+    r = client.post(
+        f"{API}/enrich/{co['id']}/apply",
+        json={"set_website": True, "emails": ["partnerships@acme.test"]},
+    )
+    assert r.json() == {"website_set": True, "contacts_added": 1, "skipped": []}
+    assert client.get(f"/api/v1/companies/{co['id']}").json()["website"] == "https://acme.test/"
+    (lead,) = client.get("/api/v1/contacts", params={"company_id": co["id"]}).json()
+    assert (lead["email"], lead["role"], lead["status"]) == (
+        "partnerships@acme.test",
+        "Generic inbox",
+        "not_contacted",
+    )
+    assert "found at https://acme.test/community" in lead["remarks"]
+
+
+def test_applying_never_trusts_what_the_browser_sends(client, fetcher, llm, db_session):
+    """An address the site doesn't show (or one already tracked) can't be smuggled in."""
+    co = make_company(client, website="https://acme.test/")
+    track(db_session, co, "info@acme.test")
+    good_site(fetcher)
+    r = client.post(
+        f"{API}/enrich/{co['id']}/apply",
+        json={
+            "emails": ["ceo@acme.test", "info@acme.test", "partnerships@acme.test", "x@evil.test"]
+        },
+    ).json()
+    assert r["contacts_added"] == 1 and set(r["skipped"]) == {
+        "ceo@acme.test",
+        "info@acme.test",
+        "x@evil.test",
+    }
+    emails = {
+        c["email"] for c in client.get("/api/v1/contacts", params={"company_id": co["id"]}).json()
+    }
+    assert emails == {"info@acme.test", "partnerships@acme.test"}
+
+
+def test_applying_checks_again_so_a_site_that_changed_saves_nothing(client, fetcher, llm):
+    co = make_company(client, website="https://acme.test/")
+    good_site(fetcher)
+    fetcher.pages["https://acme.test/"] = FetchError(
+        "Couldn't find acme.test"
+    )  # gone since the report
+    r = client.post(f"{API}/enrich/{co['id']}/apply", json={"emails": ["info@acme.test"]}).json()
+    assert r["contacts_added"] == 0 and r["skipped"] == ["info@acme.test"]
+
+
+def test_a_website_is_never_overwritten_and_only_set_when_asked(client, fetcher, llm):
+    co = make_company(client)
+    good_site(fetcher)
+    llm.reply = '{"website": "acme.test"}'
+    assert (
+        client.post(f"{API}/enrich/{co['id']}/apply", json={"emails": []}).json()["website_set"]
+        is False
+    )
+    client.patch(f"/api/v1/companies/{co['id']}", json={"website": "https://mine.test/"})
+    fetcher.pages["https://mine.test/"] = page(
+        "https://mine.test/", "Acme Robotics sponsor", title="Acme Robotics"
+    )
+    r = client.post(f"{API}/enrich/{co['id']}/apply", json={"set_website": True}).json()
+    assert r["website_set"] is False
+    assert client.get(f"/api/v1/companies/{co['id']}").json()["website"] == "https://mine.test/"

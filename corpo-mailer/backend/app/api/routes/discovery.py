@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_or_404
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
-from app.models import Prospect
+from app.models import Company, Prospect
 from app.models.enums import ProspectState, Verdict
 from app.providers.llm import LLM, get_llm
 from app.providers.web import PageFetcher, get_fetcher
@@ -60,6 +60,34 @@ def from_page(
 ):
     """Pull candidate companies out of a page that lists sponsors (no model involved)."""
     return _guard(svc.extract_sponsors, db, fetcher, body.url.strip())
+
+
+@router.post("/enrich/{company_id}", response_model=s.EnrichOut)
+def enrich_company(
+    company_id: int,
+    db: Session = Depends(get_db),
+    fetcher: PageFetcher = Depends(get_fetcher),
+    llm: LLM = Depends(get_llm),
+):
+    """Report what a tracked company's own website shows. Saves nothing."""
+    company = get_or_404(db, Company, company_id)
+    try:
+        return svc.enrich(db, fetcher, llm, company)
+    except svc.DiscoveryError as exc:
+        raise HTTPException(502, str(exc)) from None
+
+
+@router.post("/enrich/{company_id}/apply", response_model=s.EnrichApplyOut)
+def apply_enrichment(
+    company_id: int,
+    body: s.EnrichApplyIn,
+    db: Session = Depends(get_db),
+    fetcher: PageFetcher = Depends(get_fetcher),
+    llm: LLM = Depends(get_llm),
+):
+    """Save the chosen findings. The site is checked again; only what it still shows is saved."""
+    company = get_or_404(db, Company, company_id)
+    return _guard(svc.apply_enrichment, db, fetcher, llm, company, body.set_website, body.emails)
 
 
 @router.post("/{prospect_id}/verify", response_model=s.ProspectOut)

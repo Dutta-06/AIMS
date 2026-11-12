@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import EnrichPanel from "@/components/EnrichPanel";
 import { soft } from "@/components/motion/springs";
 import WordReveal from "@/components/motion/WordReveal";
 import { useToast } from "@/components/ToastProvider";
@@ -170,6 +171,9 @@ export default function CompanyPage() {
         <div className="min-w-0 space-y-10">
           <section>
             <SectionTitle>Contacts</SectionTitle>
+            <div className="mb-4">
+              <EnrichPanel companyId={id} onSaved={reload} />
+            </div>
             <ErrorNote message={rowAction.error} />
             {contacts.length === 0 ? (
               <Empty>No contacts yet. Add someone you can email.</Empty>

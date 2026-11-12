@@ -21,6 +21,12 @@ def _enum(e):
     return SAEnum(e, native_enum=False, length=32, values_callable=lambda x: [m.value for m in x])
 
 
+def linkedin_people_search(company: str) -> str:
+    """A people search for the right contact. We open it for a human; we never scrape it."""
+    words = f"{company} university relations OR partnerships OR sponsorship"
+    return "https://www.linkedin.com/search/results/people/?keywords=" + quote(words)
+
+
 class Company(Base):
     __tablename__ = "companies"
 
@@ -162,5 +168,4 @@ class Prospect(Base):
     @property
     def linkedin_search_url(self) -> str:
         """A people search for the right contact. We open it for a human; we never scrape it."""
-        words = f"{self.name} university relations OR partnerships OR sponsorship"
-        return "https://www.linkedin.com/search/results/people/?keywords=" + quote(words)
+        return linkedin_people_search(self.name)

@@ -259,6 +259,35 @@ class FromPageOut(SuggestOut):
     found: int
 
 
+class EnrichEmail(BaseModel):
+    email: str
+    source_url: str
+    already_tracked: bool
+
+
+class EnrichOut(BaseModel):
+    company_id: int
+    website: str | None  # the company's, or the one we propose (only when confirmed)
+    website_is_new: bool  # we found it; the company had none
+    verdict: Verdict
+    verdict_note: str
+    evidence: list[EvidenceOut]
+    emails: list[EnrichEmail]
+    linkedin_search_url: str
+    checked_at: datetime
+
+
+class EnrichApplyIn(BaseModel):
+    set_website: bool = False
+    emails: list[str] = Field(default_factory=list, max_length=10)
+
+
+class EnrichApplyOut(BaseModel):
+    website_set: bool
+    contacts_added: int
+    skipped: list[str]
+
+
 class VerifyIn(BaseModel):
     website: str | None = Field(default=None, max_length=300, description="Correct the address")
 

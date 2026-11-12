@@ -4,6 +4,7 @@ import type {
   Contact,
   Dashboard,
   Draft,
+  Enrichment,
   Prospect,
   ProspectState,
   DraftKind,
@@ -116,6 +117,12 @@ export const api = {
     list: (state: ProspectState | "all" = "new") => request<Prospect[]>(`/discovery${qs({ state })}`),
     suggest: (b: { count: number; focus?: string }) =>
       request<{ added: Prospect[]; skipped_duplicates: number }>("/discovery/suggest", { method: "POST", ...json(b) }),
+    enrich: (companyId: number) => request<Enrichment>(`/discovery/enrich/${companyId}`, { method: "POST" }),
+    applyEnrichment: (companyId: number, b: { set_website: boolean; emails: string[] }) =>
+      request<{ website_set: boolean; contacts_added: number; skipped: string[] }>(
+        `/discovery/enrich/${companyId}/apply`,
+        { method: "POST", ...json(b) },
+      ),
     fromPage: (url: string) =>
       request<{ added: Prospect[]; skipped_duplicates: number; found: number }>("/discovery/from-page", {
         method: "POST",

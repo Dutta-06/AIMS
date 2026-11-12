@@ -129,6 +129,18 @@ export type Evidence = {
   signal: boolean;
 };
 
+export type Enrichment = {
+  company_id: number;
+  website: string | null;
+  website_is_new: boolean;
+  verdict: Verdict;
+  verdict_note: string;
+  evidence: Evidence[];
+  emails: { email: string; source_url: string; already_tracked: boolean }[];
+  linkedin_search_url: string;
+  checked_at: string;
+};
+
 export type Prospect = {
   id: number;
   name: string;

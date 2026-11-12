@@ -183,4 +183,12 @@ networks, code hosts and event platforms, plus anything already tracked or sugge
 code, not a model. The names are guesses, so each candidate still goes through the live-web
 verification above. At most 60 are taken per page.
 
+**Enriching a tracked company** (`POST /discovery/enrich/{company_id}`): reads the company's own
+website (or, if it has none, asks the model for the official domain) and reports what is missing:
+the website, public generic inboxes and the pages seen, with dates. It saves nothing. A website
+the model guessed is only proposed if the page it points to really is that company. Saving is a
+separate call (`.../apply` with `set_website` and chosen `emails`) that checks the site *again* and
+only saves what it still shows, so nothing sent by a browser is trusted; inboxes already tracked
+are skipped, and an existing website is never overwritten.
+
 Nothing in discovery can send a message.
