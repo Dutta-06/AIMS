@@ -285,6 +285,34 @@ describe("two people saving to the same file", () => {
     expect(names(saved())).toEqual(["From A", "From B", "More from A"]);
   });
 
+  it("puts a lost update back in the file by itself, without waiting for another edit", async () => {
+    const a = await join("a@x.com", 0.1);
+    a.core.createCompany({ name: "From A" });
+    await a.p.flush();
+    const wiped = saved(); // a stale write by someone else removes A's company from the file
+    wiped.companies = [];
+    server.content = JSON.stringify(wiped);
+    server.version += 1;
+    await a.p.pull();
+    expect(names(saved())).toEqual(["From A"]);
+  });
+
+  it("two saves at the same instant both end up in the file", async () => {
+    const a = await join("a@x.com", 0.1);
+    const b = await join("b@x.com", 0.7);
+    server.delayMs = 300; // both read the file, then both write: the second write has never seen the first
+    a.core.createCompany({ name: "From A" });
+    b.core.createCompany({ name: "From B" });
+    const both = Promise.all([a.p.flush(), b.p.flush()]);
+    await settle(1000);
+    await both;
+    server.delayMs = 0;
+    await settle(5000); // the savers notice the clash and sort it out
+    expect(names(saved())).toEqual(["From A", "From B"]);
+    expect(names(a.core.db)).toEqual(["From A", "From B"]);
+    expect(names(b.core.db)).toEqual(["From A", "From B"]);
+  });
+
   it("sends only one write per save and doesn't re-read the file when nobody else has saved", async () => {
     const a = await join("a@x.com", 0.1);
     const reads = server.reads;

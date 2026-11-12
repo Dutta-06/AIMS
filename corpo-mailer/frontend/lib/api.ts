@@ -16,6 +16,10 @@ export { ApiError };
 export type { CompanyInput, ContactInput, ContactPatch };
 
 const core = () => app().ready().core;
+/** The team's settings and backups are for the admins only. */
+const admin = () => {
+  if (!app().isAdmin()) throw new ApiError(403, "Only the team admins can do that");
+};
 const drafts = () => app().ready().drafts;
 
 /** Engine calls are instant and in memory, but the screens expect promises. */
@@ -81,9 +85,10 @@ export const api = {
   },
 
   settings: {
-    get: (): Promise<EventSettings> => now(() => ({ ...core().db.settings })),
+    get: (): Promise<EventSettings> => now(() => (admin(), { ...core().db.settings })),
     update: (b: Partial<EventSettings>): Promise<EventSettings> =>
       now(() => {
+        admin();
         const c = core();
         const s = c.db.settings;
         if (b.event_name !== undefined) s.event_name = b.event_name.trim() || s.event_name;
@@ -109,7 +114,7 @@ export const api = {
 
   /** A full copy of the data as a file (a backup), and putting one back. */
   backup: {
-    export: (): Promise<Blob> => now(() => new Blob([JSON.stringify(core().db, null, 2)], { type: "application/json" })),
+    export: (): Promise<Blob> => now(() => (admin(), new Blob([JSON.stringify(core().db, null, 2)], { type: "application/json" }))),
     restore: (text: string): Promise<{ companies: number; leads: number }> =>
       now(() => {
         let raw: unknown;

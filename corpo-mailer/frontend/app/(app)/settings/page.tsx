@@ -7,6 +7,7 @@ import { useToast } from "@/components/ToastProvider";
 import { Button, Card, ErrorNote, Field, Input, PageHeader, Pill, Textarea } from "@/components/ui";
 import { api } from "@/lib/api";
 import { fmtDateTime } from "@/lib/format";
+import { isAdmin } from "@/lib/engine/admin";
 import { app, useApp } from "@/lib/engine/app";
 import { DEFAULT_MODELS, parseKeys } from "@/lib/engine/llm";
 import type { EventSettings } from "@/lib/engine/model";
@@ -349,16 +350,27 @@ function EventCard({ initial, reload }: { initial: EventSettings; reload: () => 
 }
 
 export default function SettingsPage() {
-  const { data, error, loading, reload } = useQuery("settings", () => api.settings.get());
+  const s = useApp();
+  const admin = isAdmin(s.email);
+  const { data, error, loading, reload } = useQuery("settings", () => (admin ? api.settings.get() : Promise.resolve(null)));
   return (
     <>
-      <PageHeader title="Settings" subtitle="Your account, your data, the AI and your event. Everything stays in your own Google account and this browser." />
+      <PageHeader
+        title="Settings"
+        subtitle={admin ? "Your account, your data, the AI and your event. Everything stays in your own Google account and this browser." : "Your account."}
+      />
       <div className="space-y-5">
         <AccountCard />
-        <AiCard />
-        {loading ? null : error || !data ? <ErrorNote message={error} /> : <EventCard key={JSON.stringify(data)} initial={data} reload={reload} />}
-        <WorkspaceCard />
-        <BackupCard onRestored={reload} />
+        {admin ? (
+          <>
+            <AiCard />
+            {loading ? null : error || !data ? <ErrorNote message={error} /> : <EventCard key={JSON.stringify(data)} initial={data} reload={reload} />}
+            <WorkspaceCard />
+            <BackupCard onRestored={reload} />
+          </>
+        ) : (
+          <p className="text-sm text-faint">The AI, event details, team and backups are managed by the team admins.</p>
+        )}
       </div>
     </>
   );

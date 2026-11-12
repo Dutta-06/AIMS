@@ -46,6 +46,9 @@ jobs:
           # The Google "client ID" (not a secret). Set it as a repository variable named
           # GOOGLE_CLIENT_ID; if it is empty, the login page asks for it instead.
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          # Who may change the team settings. Optional repository variable ADMIN_EMAILS (comma separated);
+          # empty means the two built-in admins.
+          NEXT_PUBLIC_ADMIN_EMAILS: ${{ vars.ADMIN_EMAILS }}
       - run: touch out/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
