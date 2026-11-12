@@ -1,8 +1,8 @@
 # Publishes the Corpo Mailer website (corpo-mailer/frontend) to GitHub Pages.
 #
-# The site is only the interface: plain static files with no data and no secrets. The backend, the
-# database and the Gmail login stay on the backend you run, which only lets allowed Google accounts in.
-# Setup steps are in corpo-mailer/docs/HOSTING.md.
+# The whole app is plain static files that run in the browser. There is no server and no secret here:
+# leads are kept in the signed-in person's own Google Drive and email goes through their own Gmail.
+# Setup steps are in corpo-mailer/docs/HOSTING.md and corpo-mailer/docs/GMAIL_SETUP.md.
 name: Corpo Mailer website (GitHub Pages)
 
 on:
@@ -38,13 +38,14 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npx tsc --noEmit
+      - run: npm test
       - run: npm run build
         env:
           # The site is served from https://<user>.github.io/<repo>/
           NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
-          # Where the backend is. Defaults to http://localhost:8000/api/v1 (your own computer);
-          # override with a repository variable named CORPO_API_URL if you ever change that.
-          NEXT_PUBLIC_API_URL: ${{ vars.CORPO_API_URL }}
+          # The Google "client ID" (not a secret). Set it as a repository variable named
+          # GOOGLE_CLIENT_ID; if it is empty, the login page asks for it instead.
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
       - run: touch out/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:

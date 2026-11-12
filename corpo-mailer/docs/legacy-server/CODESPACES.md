@@ -1,3 +1,6 @@
+> **Legacy.** This describes the earlier server version of Corpo Mailer. The current app runs
+> entirely in the browser on GitHub Pages; see [`../../README.md`](../../README.md).
+
 # Running the backend in a GitHub Codespace
 
 The website lives on GitHub Pages. GitHub Pages can only serve static files, so the **backend** (the

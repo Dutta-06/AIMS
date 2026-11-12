@@ -1,3 +1,6 @@
+> **Legacy.** This describes the earlier server version of Corpo Mailer. The current app runs
+> entirely in the browser on GitHub Pages; see [`../../README.md`](../../README.md).
+
 # Running it on an always-on server
 
 This puts the **backend** (database, AI, Gmail, reply checking) on a small Linux server that stays up

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Saves a compressed copy of the database into deploy/backups/ and keeps the newest 14.
-# Run it by hand, or daily from cron (see docs/DEPLOY.md). The backups contain your leads and the
+# Run it by hand, or daily from cron (see docs/legacy-server/DEPLOY.md). The backups contain your leads and the
 # Gmail connection, so they are kept private (mode 700 / 600).
 set -euo pipefail
 cd "$(dirname "$0")"

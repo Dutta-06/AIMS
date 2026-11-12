@@ -1,7 +1,7 @@
 # Corpo Mailer on an always-on server: the backend, its PostgreSQL database, and Caddy, which serves
 # it over https (it gets and renews the certificate by itself). Only Caddy's ports 80/443 are open to
 # the internet; the backend and the database are reachable only inside this stack.
-# Guide: ../docs/DEPLOY.md
+# Guide: ../docs/legacy-server/DEPLOY.md
 name: corpo-mailer
 
 services:

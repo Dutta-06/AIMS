@@ -1,3 +1,6 @@
+> **Legacy.** This is the earlier server version. The current app runs entirely in the browser
+> (see `../README.md`) and does not use this backend.
+
 # Corpo Mailer: backend
 
 Outreach tracker for brAInwave sponsorship. It tracks who the team has contacted, on which channel
@@ -261,11 +264,11 @@ signed-in person presses **Connect Gmail** in Settings.
 backend in a Codespace, take secrets (`ALLOWED_EMAILS`, `OPENROUTER_API_KEY`, ...) from Codespaces
 secrets, work out the Codespace's address for the Google redirect and CORS, and refuse to start
 without `ALLOWED_EMAILS`. With sign-in on, the API docs pages (`/docs`, `/redoc`, `/openapi.json`) are
-disabled. See [`../docs/CODESPACES.md`](../docs/CODESPACES.md).
+disabled. See [`../docs/legacy-server/CODESPACES.md`](../docs/CODESPACES.md).
 
 ## Running on an always-on server
 
 `backend/Dockerfile` and `entrypoint.sh`, with `../deploy/docker-compose.yml` (backend + PostgreSQL +
 Caddy for automatic https), run it on a VPS you SSH into. The entrypoint refuses to start without
 `ALLOWED_EMAILS` and the Google client settings, applies database migrations, then starts the server
-behind Caddy. See [`../docs/DEPLOY.md`](../docs/DEPLOY.md).
+behind Caddy. See [`../docs/legacy-server/DEPLOY.md`](../docs/DEPLOY.md).
