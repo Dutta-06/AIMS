@@ -9,13 +9,13 @@ approved it. It is not a bulk mailer.
 | Need | Where it lives |
 | --- | --- |
 | Sign-in | Google ("Sign in with Google") |
-| Leads and drafts | One file in your own Google Drive (hidden app-data folder) |
+| Leads and drafts | One file in Google Drive, shared by the team (everyone sees the same dashboard) |
 | Sending email, checking replies | Your own Gmail, through the Gmail API |
 | AI drafting | OpenRouter free models, called from the browser with a key you paste in Settings |
 
 Start here:
 
-1. [`docs/GMAIL_SETUP.md`](docs/GMAIL_SETUP.md): the one-time Google Cloud setup (about 10 minutes).
+1. [`docs/GMAIL_SETUP.md`](docs/GMAIL_SETUP.md): the one-time Google Cloud setup (about 15 minutes), and how the team shares a workspace.
 2. [`docs/HOSTING.md`](docs/HOSTING.md): publish the site on GitHub Pages.
 3. [`frontend/README.md`](frontend/README.md): what each screen does, and how to develop.
 

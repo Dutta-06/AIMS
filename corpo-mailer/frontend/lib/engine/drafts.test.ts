@@ -614,3 +614,95 @@ describe("standing brief and past messages as references", () => {
     expect(p.indexOf("PAST MESSAGES")).toBeLessThan(p.indexOf("<data>"));
   });
 });
+
+describe("two people sending from one shared workspace", () => {
+  const approved = async () => {
+    const { draft } = setup();
+    await drafts.approve(draft.id);
+    return draft;
+  };
+  const mk = (settle: () => Promise<void>) => new Drafts(core, { llm: () => llm, mailer: () => mailer, who: () => who, settle });
+
+  it("records who is sending while it happens, and clears that once sent", async () => {
+    const d = await approved();
+    let during: string | null | undefined;
+    const d2 = mk(async () => {
+      during = core.db.drafts[0].claimed_by;
+    });
+    await d2.send(d.id);
+    expect(during).toBe("team@gmail.com");
+    expect(core.db.drafts[0]).toMatchObject({ status: "sent", claimed_by: null, claimed_at: null });
+  });
+
+  it("checks with the shared file before the email goes out, not after", async () => {
+    const d = await approved();
+    const order: string[] = [];
+    const m = new FakeMailer();
+    const origSend = m.send.bind(m);
+    m.send = async (x) => (order.push("mail"), origSend(x));
+    const d2 = new Drafts(core, { llm: () => llm, mailer: () => m, who: () => who, settle: async () => void order.push("settle") });
+    await d2.send(d.id);
+    expect(order).toEqual(["settle", "mail"]);
+  });
+
+  it("does not send if a teammate got there first", async () => {
+    const d = await approved();
+    const d2 = mk(async () => {
+      // the shared file said: a teammate is already sending this one
+      core.replaceDb({ ...core.db, drafts: core.db.drafts.map((x) => ({ ...x, claimed_by: "ben@gmail.com" })) });
+    });
+    await rejects(d2.send(d.id), 409, /teammate is sending/);
+    expect(mailer.sent).toEqual([]);
+  });
+
+  it("does not send if a teammate already sent it", async () => {
+    const d = await approved();
+    const d2 = mk(async () => {
+      core.replaceDb({ ...core.db, drafts: core.db.drafts.map((x) => ({ ...x, status: "sent" as const, sent_at: "2026-03-10T10:00:00Z" })) });
+    });
+    await rejects(d2.send(d.id), 409, /already sent/);
+    expect(mailer.sent).toEqual([]);
+  });
+
+  it("still sends when the check can't reach Drive (offline), and records the send on the current records", async () => {
+    const d = await approved();
+    const d2 = mk(async () => {
+      core.replaceDb(JSON.parse(JSON.stringify(core.db))); // like a merge: every record is a fresh object
+      throw new Error("offline");
+    });
+    await d2.send(d.id);
+    expect(mailer.sent).toHaveLength(1);
+    expect(core.db.drafts[0].status).toBe("sent");
+    expect(core.db.contacts[0].status).toBe("contacted");
+    expect(core.db.interactions.some((i) => i.type === "email_sent")).toBe(true);
+  });
+
+  it("a failed send releases the claim", async () => {
+    const d = await approved();
+    mailer.fail = "boom";
+    await rejects(mk(async () => {}).send(d.id), 409, /Sending failed/);
+    expect(core.db.drafts[0]).toMatchObject({ status: "approved", claimed_by: null });
+  });
+
+  it("an interrupted send of mine is put back; a teammate's fresh one is left to them; a stale one is released", () => {
+    const mine = setup().draft;
+    const co = core.createCompany({ name: "Other" });
+    const c2 = core.createContact({ company_id: co.id, name: "X", email: "x@o.com" });
+    const theirs = drafts.create({ contact_id: c2.id, subject: "s", body: "b" });
+    const old = drafts.create({ contact_id: c2.id, subject: "s2", body: "b2" });
+    const set = (id: number, by: string, at: string) => Object.assign(core.db.drafts.find((x) => x.id === id)!, { status: "sending", claimed_by: by, claimed_at: at });
+    set(mine.id, "team@gmail.com", "2026-03-10T09:59:00Z");
+    set(theirs.id, "ben@gmail.com", "2026-03-10T09:59:00Z");
+    set(old.id, "ben@gmail.com", "2026-03-10T08:00:00Z");
+    expect(recoverInterruptedSends(core, "team@gmail.com")).toBe(2);
+    const st = (id: number) => core.db.drafts.find((x) => x.id === id)!.status;
+    expect([st(mine.id), st(theirs.id), st(old.id)]).toEqual(["approved", "sending", "approved"]);
+  });
+
+  it("when only stale ones are wanted (a teammate's save arrived), my own live send is left alone", () => {
+    const mine = setup().draft;
+    Object.assign(core.db.drafts[0], { status: "sending", claimed_by: "team@gmail.com", claimed_at: "2026-03-10T09:59:59Z" });
+    expect(recoverInterruptedSends(core, "team@gmail.com", { staleOnly: true })).toBe(0);
+    expect(core.db.drafts.find((x) => x.id === mine.id)!.status).toBe("sending");
+  });
+});

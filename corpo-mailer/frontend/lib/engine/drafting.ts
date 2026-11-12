@@ -193,7 +193,7 @@ export async function generateDraft(core: Core, llm: LLM, contact: ContactRow, k
   const company = core.db.companies.find((c) => c.id === contact.company_id);
   const { subject, body } = await ask(llm, channel, buildPrompt(core, company, contact, kind, instructions, channel));
   const draft: DraftRow = {
-    id: core.db.seq.draft + 1,
+    id: core.newId("draft"),
     contact_id: contact.id,
     channel,
     subject,
@@ -208,7 +208,6 @@ export async function generateDraft(core: Core, llm: LLM, contact: ContactRow, k
     created_at: core.iso(),
     history: [],
   };
-  core.db.seq.draft += 1;
   core.db.drafts.push(draft);
   core.changed();
   return draft;
@@ -247,6 +246,10 @@ export async function reviseDraft(core: Core, llm: LLM, draft: DraftRow, feedbac
     `TEAM FEEDBACK:\n${fb.slice(0, 1000)}`,
   ].join("\n\n");
   const { subject, body } = await ask(llm, draft.channel, prompt);
+  // A teammate's save may have been merged in while the AI was thinking; change the current record.
+  const live = core.db.drafts.find((x) => x.id === draft.id);
+  if (!live) throw new GenerationError("This draft was deleted while the AI was rewriting it");
+  draft = live;
 
   draft.history = [...draft.history, { subject: draft.subject, body: draft.body, feedback: fb.slice(0, 1000), at: core.iso() }].slice(-REVISIONS_KEPT);
   draft.subject = subject;

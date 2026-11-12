@@ -27,7 +27,7 @@ export default function LoginPage() {
     void app().init();
   }, []);
   useEffect(() => {
-    if (s.phase === "ready") router.replace("/");
+    if (s.phase === "ready" || s.phase === "needs_workspace") router.replace("/");
   }, [s.phase, router]);
 
   async function signIn() {
@@ -42,14 +42,14 @@ export default function LoginPage() {
     }
   }
 
-  if (!s.booted || s.phase === "ready" || s.phase === "loading") return <Loading label={s.phase === "loading" ? "Opening your data" : "Loading"} />;
+  if (!s.booted || s.phase === "ready" || s.phase === "loading" || s.phase === "needs_workspace") return <Loading label={s.phase === "loading" ? "Opening your data" : "Loading"} />;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center px-5">
       <Card className="w-full space-y-4">
         <div>
           <h1 className="text-[1.6rem] font-medium tracking-[-0.02em] text-heading">Corpo Mailer</h1>
-          <p className="mt-1 text-sm text-body">Sign in with Google. Your leads are kept in your own Google Drive and your emails go from your own Gmail.</p>
+          <p className="mt-1 text-sm text-body">Sign in with Google. The team shares one workspace file in Google Drive, and your emails go from your own Gmail.</p>
         </div>
 
         {!s.client_id_set && (
@@ -68,7 +68,7 @@ export default function LoginPage() {
           <summary className="cursor-pointer text-body hover:text-heading">What it asks Google for</summary>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-body">
             <li>Your email address, to know who you are.</li>
-            <li>A private file in your Drive that only this app can see: where your leads are saved.</li>
+            <li>Google Drive, but only the one shared workspace file: the app can open the file it creates or the one you choose, and nothing else in your Drive.</li>
             <li>Sending email as you, only when you approve and send a draft.</li>
             <li>Reading your inbox, only to spot replies. It never changes, moves or deletes mail.</li>
           </ul>

@@ -214,7 +214,7 @@ function handleReply(core: Core, msg: IncomingMessage, own: Set<string>): "reply
 }
 
 export async function syncReplies(core: Core, reader: MailboxReader, ownAddress: string | null): Promise<SyncResult> {
-  const mb = core.db.mailbox;
+  let mb = core.db.mailbox;
   const startedAt = core.now().getTime();
   const sinceMs = mb.synced_until === null ? startedAt - LOOKBACK_DAYS * 86_400_000 : mb.synced_until - OVERLAP_MS;
   let messages: IncomingMessage[];
@@ -225,6 +225,7 @@ export async function syncReplies(core: Core, reader: MailboxReader, ownAddress:
     core.changed();
     throw e;
   }
+  mb = core.db.mailbox; // a teammate's save may have been merged in while the inbox was being read
   const own = new Set(ownAddress ? [ownAddress.toLowerCase()] : []);
   const seen = new Set(core.db.interactions.map((i) => i.message_id).filter((x): x is string => !!x));
   const result: SyncResult = { fetched: 0, replies: 0, bounces: 0, ignored: 0, unmatched: 0 };

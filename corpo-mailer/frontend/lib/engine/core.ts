@@ -69,12 +69,27 @@ function checkStatus(v: unknown): Status {
 const cmp = (a: string | null, b: string | null) => (a ?? "").toLowerCase().localeCompare((b ?? "").toLowerCase());
 const has = (haystack: (string | null)[], needle: string) => haystack.some((h) => (h ?? "").toLowerCase().includes(needle));
 
+/** Hands out ids. Alone, 1, 2, 3...; in a shared workspace they come from the clock plus a random
+ * part, so two people adding leads at the same time never pick the same id. */
+export type IdGen = (kind: keyof DB["seq"], db: DB) => number;
+export const sequentialIds: IdGen = (kind, db) => ++db.seq[kind];
+export function sharedIds(now: () => number = () => Date.now(), rand: () => number = Math.random): IdGen {
+  let last = 0;
+  return () => {
+    let id = now() * 1000 + Math.floor(rand() * 1000);
+    if (id <= last) id = last + 1;
+    last = id;
+    return id;
+  };
+}
+
 /** All of the app's data and rules, in memory. Persistence is somebody else's job: pass `onChange`. */
 export class Core {
   constructor(
     public db: DB = emptyDb(),
     public now: () => Date = () => new Date(),
     public onChange: () => void = () => {},
+    public ids: IdGen = sequentialIds,
   ) {}
 
   iso(): string {
@@ -86,9 +101,13 @@ export class Core {
     this.onChange();
   }
 
-  private nextId(kind: keyof DB["seq"]): number {
-    this.db.seq[kind] += 1;
-    return this.db.seq[kind];
+  newId(kind: keyof DB["seq"]): number {
+    return this.ids(kind, this.db);
+  }
+
+  /** Swap in data that came from the shared file. Doesn't count as a change to save. */
+  replaceDb(next: DB) {
+    Object.assign(this.db, next);
   }
 
   // ------------------------------------------------------------------ companies
@@ -120,7 +139,7 @@ export class Core {
     if (!name) throw invalid("A company needs a name");
     if (this.nameTaken(name)) throw conflict("A company with that name already exists");
     const company: Company = {
-      id: this.nextId("company"),
+      id: this.newId("company"),
       name,
       industry: blank(input.industry),
       website: blank(input.website),
@@ -195,7 +214,7 @@ export class Core {
     const status = input.status === undefined ? "not_contacted" : checkStatus(input.status);
     const now = this.iso();
     const row: ContactRow = {
-      id: this.nextId("contact"),
+      id: this.newId("contact"),
       company_id: input.company_id,
       name,
       email,
@@ -279,7 +298,7 @@ export class Core {
     },
   ): InteractionRow {
     const row: InteractionRow = {
-      id: this.nextId("interaction"),
+      id: this.newId("interaction"),
       contact_id: contactId,
       type: v.type,
       channel: v.channel ?? null,

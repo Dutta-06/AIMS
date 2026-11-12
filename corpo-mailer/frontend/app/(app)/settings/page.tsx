@@ -8,7 +8,7 @@ import { Button, Card, ErrorNote, Field, Input, PageHeader, Pill, Textarea } fro
 import { api } from "@/lib/api";
 import { fmtDateTime } from "@/lib/format";
 import { app, useApp } from "@/lib/engine/app";
-import { DEFAULT_MODELS } from "@/lib/engine/llm";
+import { DEFAULT_MODELS, parseKeys } from "@/lib/engine/llm";
 import type { EventSettings } from "@/lib/engine/model";
 import { useAction, useQuery } from "@/lib/hooks";
 
@@ -34,7 +34,7 @@ function AccountCard() {
         <Pill tone={s.save.state === "error" ? "amber" : "green"}>{status}</Pill>
       </h2>
       <p className="text-sm text-body">
-        Signed in as <span className="font-mono text-[0.85rem] text-heading">{s.email}</span>. Emails go out from this Gmail account, and your leads are saved in a private file in this account&apos;s Google Drive that only this app can see.
+        Signed in as <span className="font-mono text-[0.85rem] text-heading">{s.email}</span>. Emails go out from this Gmail account. Your changes are saved to the team&apos;s shared file in Google Drive, and teammates&apos; changes appear here by themselves.
         {s.save.last_saved_at && <> Last saved {fmtDateTime(s.save.last_saved_at)}.</>}
       </p>
       <ErrorNote message={save.error ?? (s.save.state === "error" ? s.save.error : null)} />
@@ -51,7 +51,97 @@ function AccountCard() {
           Sign out
         </Button>
       </div>
-      <p className="text-xs text-faint">Changes save by themselves a moment after you make them. To remove everything, revoke the app at myaccount.google.com/permissions; its private Drive file goes with it.</p>
+      <p className="text-xs text-faint">Changes save by themselves a moment after you make them. Your AI key and sign-in stay in this browser only; they are never put in the shared file.</p>
+    </Card>
+  );
+}
+
+function WorkspaceCard() {
+  const s = useApp();
+  const toast = useToast();
+  const share = useAction();
+  const refresh = useAction();
+  const [email, setEmail] = useState("");
+  const [leaving, setLeaving] = useState(false);
+  const people = useQuery("collaborators", () => app().collaborators());
+  const w = s.workspace;
+  if (!w) return null;
+  return (
+    <Card className="space-y-3">
+      <h2 className="text-[1.05rem] font-medium text-heading">Team workspace</h2>
+      <p className="text-sm text-body">
+        Everyone works from the same file in Google Drive:{" "}
+        <a className="text-heading underline underline-offset-2" href={`https://drive.google.com/file/d/${encodeURIComponent(w.id)}/view`} target="_blank" rel="noopener noreferrer">
+          {w.name}
+        </a>
+        . Changes from teammates show up here within about half a minute.
+      </p>
+      <div>
+        <p className="mb-1 text-xs uppercase tracking-wide text-faint">Who has access</p>
+        {people.loading ? (
+          <p className="text-sm text-faint">Loading…</p>
+        ) : people.error || !people.data ? (
+          <p className="text-sm text-faint">Couldn&apos;t load the list ({people.error ?? "unknown"}).</p>
+        ) : (
+          <ul className="space-y-1">
+            {people.data.map((p) => (
+              <li key={p.email} className="flex items-center gap-2 text-sm text-body">
+                <span className="font-mono text-[0.85rem] text-heading">{p.email}</span>
+                <Pill tone={p.role === "owner" ? "green" : "amber"}>{p.role === "owner" ? "owner" : "editor"}</Pill>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      <Field label="Add a teammate (their Google account email)">
+        <div className="flex gap-2">
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="teammate@gmail.com" autoCapitalize="none" />
+          <Button
+            variant="primary"
+            disabled={share.busy || !email.trim()}
+            onClick={async () => {
+              if (await share.run(() => app().shareWith(email))) {
+                toast(`Shared with ${email.trim()}. Google emailed them a link.`);
+                setEmail("");
+                people.reload();
+              }
+            }}
+          >
+            {share.busy ? "Sharing…" : "Share"}
+          </Button>
+        </div>
+      </Field>
+      <p className="text-xs text-faint">They also need to be allowed to sign in to the app (Google Cloud → Audience → Test users). Then they open the site, sign in, and choose this file.</p>
+      <ErrorNote message={share.error ?? refresh.error} />
+      <div className="flex flex-wrap gap-2">
+        <Button
+          disabled={refresh.busy}
+          onClick={async () => {
+            if (await refresh.run(() => app().refreshShared())) toast("Up to date");
+          }}
+        >
+          {refresh.busy ? "Checking…" : "Check for teammates’ changes"}
+        </Button>
+        <Button variant="ghost" onClick={() => setLeaving(true)}>
+          Use a different workspace
+        </Button>
+      </div>
+      <AnimatePresence>
+        {leaving && (
+          <ConfirmDialog
+            title="Stop using this workspace?"
+            confirmLabel="Stop using it"
+            confirmVariant="danger"
+            onCancel={() => setLeaving(false)}
+            onConfirm={async () => {
+              setLeaving(false);
+              await app().leaveWorkspace();
+            }}
+          >
+            <p>Your changes are saved first. The file stays in Google Drive and nothing is deleted; you&apos;ll be asked to start or choose a workspace again.</p>
+          </ConfirmDialog>
+        )}
+      </AnimatePresence>
     </Card>
   );
 }
@@ -123,6 +213,10 @@ function AiCard() {
   void s; // re-render when settings change
   const toast = useToast();
   const [key, setKey] = useState(() => app().openrouterKey());
+  const [show, setShow] = useState(false);
+  const count = parseKeys(key).length;
+  const [teamKeys, setTeamKeys] = useState(() => app().core?.db.settings.team_ai_keys ?? "");
+  const teamCount = parseKeys(teamKeys).length;
   const [models, setModels] = useState(() => (app().models().join(", ") === DEFAULT_MODELS.join(", ") ? "" : app().models().join(", ")));
   const test = useAction();
   const [answer, setAnswer] = useState<string | null>(null);
@@ -130,12 +224,41 @@ function AiCard() {
     <Card className="space-y-3">
       <h2 className="flex items-center gap-2 text-[1.05rem] font-medium text-heading">
         The AI (OpenRouter)
-        {app().openrouterKey() ? <Pill tone="green">Key saved</Pill> : <Pill tone="amber">No key yet</Pill>}
+        {app().openrouterKeyCount() > 0 ? <Pill tone="green">{app().openrouterKeyCount() === 1 ? "Key saved" : `${app().openrouterKeyCount()} keys saved`}</Pill> : <Pill tone="amber">No key yet</Pill>}
       </h2>
-      <p className="text-sm text-body">Drafts and revisions use OpenRouter&apos;s free models. Paste your key from openrouter.ai/keys. It is kept in this browser only and is sent to openrouter.ai and nowhere else (it is not saved to your Drive).</p>
-      <Field label="OpenRouter key">
-        <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="sk-or-…" autoComplete="off" spellCheck={false} className="font-mono text-[0.85rem]" />
+      <p className="text-sm text-body">
+        Drafts and revisions use OpenRouter&apos;s free models. Paste your key from openrouter.ai/keys. Keys are only ever sent to openrouter.ai. Put the team&apos;s keys (one per line) in <b>Team keys</b> so everyone gets them automatically, or keep one only for this browser in the first box. Requests take turns across all the keys and a rate-limited key hands over to the next. Keys only add up when they belong to different OpenRouter accounts.
+      </p>
+      <Field label={count > 1 ? `OpenRouter keys (${count}, one per line)` : "OpenRouter key (one per line if you have several)"}>
+        <Textarea
+          rows={count > 1 || show ? Math.min(Math.max(count, 2), 6) : 2}
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="sk-or-…"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          className="font-mono text-[0.85rem]"
+          style={{ WebkitTextSecurity: show ? "none" : "disc" } as React.CSSProperties}
+        />
       </Field>
+      <Field label={`Team keys (${teamCount} shared, one per line)`}>
+        <Textarea
+          rows={Math.min(Math.max(teamCount, 2), 6)}
+          value={teamKeys}
+          onChange={(e) => setTeamKeys(e.target.value)}
+          placeholder="sk-or-… (one per teammate)"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          className="font-mono text-[0.85rem]"
+          style={{ WebkitTextSecurity: show ? "none" : "disc" } as React.CSSProperties}
+        />
+        <span className="mt-1 block text-xs text-faint">Shared with everyone in the workspace through the shared file, so nobody sets keys up again on a new device. Anyone who can open that file can read these keys.</span>
+      </Field>
+      <button type="button" className="text-xs text-body underline underline-offset-2 hover:text-heading" onClick={() => setShow((v) => !v)}>
+        {show ? "Hide the keys" : "Show the keys"}
+      </button>
       <details className="text-sm">
         <summary className="cursor-pointer text-body hover:text-heading">Choose the models (advanced)</summary>
         <div className="pt-2">
@@ -149,19 +272,21 @@ function AiCard() {
       <div className="flex flex-wrap gap-2">
         <Button
           variant="primary"
-          onClick={() => {
+          onClick={async () => {
             app().setOpenrouterKey(key);
             app().setModels(models);
+            await api.settings.update({ team_ai_keys: teamKeys });
             toast("AI settings saved");
           }}
         >
           Save
         </Button>
         <Button
-          disabled={test.busy || !key.trim()}
+          disabled={test.busy || (!key.trim() && !teamKeys.trim())}
           onClick={async () => {
             app().setOpenrouterKey(key);
             app().setModels(models);
+            await api.settings.update({ team_ai_keys: teamKeys });
             setAnswer(null);
             let r = "";
             if (await test.run(async () => (r = await api.ai.test()))) setAnswer(r);
@@ -232,6 +357,7 @@ export default function SettingsPage() {
         <AccountCard />
         <AiCard />
         {loading ? null : error || !data ? <ErrorNote message={error} /> : <EventCard key={JSON.stringify(data)} initial={data} reload={reload} />}
+        <WorkspaceCard />
         <BackupCard onRestored={reload} />
       </div>
     </>

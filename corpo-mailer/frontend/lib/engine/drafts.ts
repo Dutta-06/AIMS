@@ -27,6 +27,9 @@ export type Deps = {
   llm: () => LLM;
   /** null: no Gmail is connected, so nothing can be sent. */
   mailer: () => Mailer | null;
+  /** Called after the claim is made and before the email goes out: saves the claim to the shared
+   * file and looks for a teammate's claim on the same draft. */
+  settle?: () => Promise<void>;
   /** Who is acting (their Google account), recorded as the approver. */
   who: () => string | null;
 };
@@ -90,7 +93,7 @@ export class Drafts {
     if (channel !== "email" && channel !== "linkedin") throw invalid("Drafts can be written for email or LinkedIn");
     if (!b.subject?.trim() || !b.body?.trim()) throw invalid("A draft needs a subject and a body");
     const d: DraftRow = {
-      id: ++this.core.db.seq.draft,
+      id: this.core.newId("draft"),
       contact_id: b.contact_id,
       channel,
       subject: b.subject,
@@ -180,10 +183,10 @@ export class Drafts {
   }
 
   async send(id: number): Promise<Draft> {
-    const d = this.require(id);
+    let d = this.require(id);
     this.emailOnly(d, "Sending");
     if (d.status !== "approved" || d.approved_hash === null) throw conflict("Draft has not been approved by a human");
-    const contact = this.contactOf(d);
+    let contact = this.contactOf(d);
     if (contact.do_not_contact) throw conflict("This contact is marked do-not-contact");
     const address = this.address(contact);
     const mailer = this.deps.mailer();
@@ -191,7 +194,10 @@ export class Drafts {
 
     // Claim the draft before anything slow happens. Setting the status here, with nothing awaited
     // since the check above, is the lock: of two sends only one gets past, the other sees "sending".
+    const me = this.deps.who() ?? "someone";
     d.status = "sending";
+    d.claimed_by = me;
+    d.claimed_at = this.core.iso();
     this.core.changed();
     const expected = d.approved_hash;
     const hashNow = await contentHash(address, d.subject, d.body);
@@ -202,11 +208,22 @@ export class Drafts {
       this.core.changed();
       throw conflict("Draft changed since approval; review and approve it again");
     }
+    if (this.deps.settle) {
+      // Tell teammates this email is being sent, and check none of them got there first.
+      await this.deps.settle().catch(() => {}); // an offline save here is fine: the in-memory claim still holds
+      const live = this.core.db.drafts.find((x) => x.id === id);
+      if (!live || live.status !== "sending" || live.claimed_by !== me) {
+        throw conflict(live?.status === "sent" ? "A teammate has already sent this email" : "A teammate is sending this email right now");
+      }
+      d = live;
+      contact = this.contactOf(d); // the merge replaced the records; work on the current ones
+    }
     let sent: { messageId: string | null; threadId: string | null };
     try {
       sent = await mailer.send({ to: address, subject: d.subject, body: d.body });
     } catch (e) {
       d.status = "approved";
+      d.claimed_by = d.claimed_at = null;
       d.last_error = e instanceof Error ? e.message : "The email couldn't be sent";
       this.core.changed();
       throw conflict(`Sending failed: ${d.last_error}`);
@@ -215,6 +232,7 @@ export class Drafts {
     d.status = "sent";
     d.sent_at = now;
     d.last_error = null;
+    d.claimed_by = d.claimed_at = null;
     recordOutreach(contact, "email", now); // contacted, by email, just now
     contact.updated_at = now;
     this.core.addInteraction(contact.id, {
@@ -256,10 +274,17 @@ export { ApiError };
 
 /** A tab closed (or the network dropped) in the middle of a send leaves a draft marked "sending".
  * We can't know whether Gmail got it, so put it back as approved with a warning to check first. */
-export function recoverInterruptedSends(core: Core): number {
+export const STALE_SEND_MS = 15 * 60_000;
+export function recoverInterruptedSends(core: Core, me: string | null = null, opts: { staleOnly?: boolean } = {}): number {
   let n = 0;
+  const now = core.now().getTime();
   for (const d of core.db.drafts) {
-    if (d.status === "sending") {
+    // A teammate's send that is still fresh is theirs to finish; only mine (from a closed tab) or
+    // one nobody has touched for a while counts as interrupted.
+    const stale = d.claimed_at ? now - Date.parse(d.claimed_at) > STALE_SEND_MS : true;
+    const mine = !d.claimed_by || d.claimed_by === me;
+    if (d.status === "sending" && (opts.staleOnly ? stale : mine || stale)) {
+      d.claimed_by = d.claimed_at = null;
       d.status = "approved";
       d.last_error = "A send was interrupted (the page was closed or the connection dropped). Check your Gmail Sent folder before sending this again.";
       n += 1;
