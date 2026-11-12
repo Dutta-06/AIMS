@@ -95,7 +95,7 @@ describe("when models fail", () => {
   });
 
   it("no key means no request, and a clear instruction", async () => {
-    await expect(ask(llm({ apiKey: () => "  " }))).rejects.toThrow(/Add your OpenRouter key in Settings/);
+    await expect(ask(llm({ apiKey: () => "  " }))).rejects.toThrow(/No AI key is set up yet/);
     expect(calls).toHaveLength(0);
   });
 });
