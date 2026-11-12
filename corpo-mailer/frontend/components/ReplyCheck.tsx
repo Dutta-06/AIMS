@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRef, useState } from "react";
 import { useSignal } from "@/components/signal/SignalProvider";
 import { Button } from "@/components/ui";
@@ -37,13 +36,13 @@ export default function ReplyCheck({ status, onDone }: { status: ReplyStatus; on
   const dot = !status.configured || (!checked && !failing) ? "bg-faint" : failing ? "bg-danger" : "bg-ok";
 
   const line = !status.configured
-    ? "Reply tracking is off. Connect Gmail in Settings, or log replies by hand."
+    ? "Sign in with Google to check for replies."
     : (error ??
       result ??
       (status.last_error
         ? `Last check failed: ${status.last_error}`
         : status.last_sync_at
-          ? `Checked ${age(status.last_sync_at)}${status.polling ? " · checks automatically" : ""}`
+          ? `Checked ${age(status.last_sync_at)}${status.polling ? " · checks every 5 minutes while this page is open" : ""}`
           : "Not checked yet"));
 
   return (
@@ -73,11 +72,6 @@ export default function ReplyCheck({ status, onDone }: { status: ReplyStatus; on
       >
         <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
         {line}
-        {!status.configured && (
-          <Link href="/settings" className="shrink-0 text-heading underline underline-offset-2">
-            Settings
-          </Link>
-        )}
       </p>
     </div>
   );

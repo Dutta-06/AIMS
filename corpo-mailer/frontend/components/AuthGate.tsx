@@ -1,71 +1,45 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import BackendAddress from "@/components/BackendAddress";
+import { useEffect } from "react";
 import { Button, Card, ErrorNote, Loading } from "@/components/ui";
-import { api } from "@/lib/api";
-import { SIGNED_OUT } from "@/lib/auth";
-import { errorMessage } from "@/lib/hooks";
-
-type State = { kind: "checking" } | { kind: "ok" } | { kind: "down"; message: string };
+import { app, useApp } from "@/lib/engine/app";
 
 /**
- * Nothing in the app is shown until the backend says this browser may use it. The check is only a
- * convenience for the person: the backend refuses every request without a valid token anyway.
+ * Nothing in the app is shown until this browser is signed in with Google and the person's data has
+ * been opened from their own Drive.
  */
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [state, setState] = useState<State>({ kind: "checking" });
-
-  // State is only set from the answer (never synchronously inside the effect).
-  const run = useCallback(() => {
-    api.auth
-      .status()
-      .then((s) => {
-        if (s.required && !s.authenticated) router.replace("/login");
-        else setState({ kind: "ok" });
-      })
-      .catch((e) => setState({ kind: "down", message: errorMessage(e) }));
-  }, [router]);
-
-  const retry = () => {
-    setState({ kind: "checking" });
-    run();
-  };
+  const s = useApp();
 
   useEffect(() => {
-    run();
-  }, [run]);
+    void app().init();
+  }, []);
 
   useEffect(() => {
-    const out = () => router.replace("/login");
-    window.addEventListener(SIGNED_OUT, out);
-    return () => window.removeEventListener(SIGNED_OUT, out);
-  }, [router]);
+    if (s.booted && s.phase === "signed_out") router.replace("/login");
+  }, [s.booted, s.phase, router]);
 
-  if (state.kind === "ok") return <>{children}</>;
-  if (state.kind === "down") {
+  if (s.phase === "ready") return <>{children}</>;
+  if (s.phase === "error" && s.booted) {
     return (
       <main className="mx-auto flex min-h-screen max-w-md items-center px-5">
         <Card className="w-full space-y-3">
-          <h1 className="text-lg font-medium text-heading">Can&apos;t reach the backend</h1>
-          <p className="text-sm text-body">
-            This page is only the interface. Your leads and settings live in the backend you run on your own computer, and it isn&apos;t answering. Start it, then try again.
-          </p>
-          <ErrorNote message={state.message} />
-          <Button variant="primary" onClick={retry}>
-            Try again
-          </Button>
-          <details className="border-t border-hairline pt-3 text-sm">
-            <summary className="cursor-pointer text-body hover:text-heading">Using a different backend (for example a Codespace)?</summary>
-            <div className="pt-3">
-              <BackendAddress />
-            </div>
-          </details>
+          <h1 className="text-lg font-medium text-heading">Couldn&apos;t open your data</h1>
+          <p className="text-sm text-body">Your leads are kept in a private file in your own Google Drive. It couldn&apos;t be opened just now, and nothing was changed.</p>
+          <ErrorNote message={s.error} />
+          <div className="flex gap-2">
+            <Button variant="primary" onClick={() => void app().retry().catch(() => {})}>
+              Try again
+            </Button>
+            <Button variant="ghost" onClick={() => void app().signOut()}>
+              Sign out
+            </Button>
+          </div>
         </Card>
       </main>
     );
   }
-  return <Loading label="Checking sign-in" />;
+  return <Loading label={s.booted && s.phase === "signed_out" ? "Taking you to sign-in" : "Opening your data"} />;
 }

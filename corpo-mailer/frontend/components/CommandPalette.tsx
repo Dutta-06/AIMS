@@ -14,10 +14,8 @@ const PAGES = [
   { label: "Leads", href: "/leads" },
   { label: "Import leads", href: "/leads/import" },
   { label: "Companies", href: "/companies" },
-  { label: "Discovery", href: "/discovery" },
   { label: "Drafts", href: "/drafts" },
   { label: "Settings", href: "/settings" },
-  { label: "Connect Gmail", href: "/settings" },
 ];
 
 type Item =

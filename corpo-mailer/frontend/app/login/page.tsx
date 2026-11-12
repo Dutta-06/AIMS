@@ -1,15 +1,9 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
-import BackendAddress from "@/components/BackendAddress";
-import { Button, Card, ErrorNote, Loading } from "@/components/ui";
-import { api } from "@/lib/api";
-import { saveSession } from "@/lib/auth";
-import { errorMessage } from "@/lib/hooks";
-import type { AuthStatus } from "@/lib/types";
-
-const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { Button, Card, ErrorNote, Field, Input, Loading } from "@/components/ui";
+import { app, useApp } from "@/lib/engine/app";
 
 function GoogleMark() {
   return (
@@ -22,100 +16,65 @@ function GoogleMark() {
   );
 }
 
-function LoginInner() {
+export default function LoginPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const result = params.get("signin");
-  const code = params.get("code");
-  const reason = params.get("reason");
-  const [status, setStatus] = useState<AuthStatus | null>(null);
-  // A failed sign-in comes back as ?signin=error&reason=...; a good one as ?signin=ok&code=...
-  const [error, setError] = useState<string | null>(() => (result === "error" ? reason || "Sign-in didn't work" : null));
+  const s = useApp();
+  const [clientId, setClientId] = useState("");
   const [busy, setBusy] = useState(false);
-  const done = useRef(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (done.current) return;
-    done.current = true;
-    if (result === "ok" && code) {
-      // The login code is single use: trade it for a session once, then clean the address bar.
-      api.auth
-        .exchange(code)
-        .then((s) => {
-          saveSession(s.token, s.expires_at, s.email);
-          router.replace("/");
-        })
-        .catch((e) => {
-          setError(errorMessage(e));
-          router.replace("/login/");
-        });
-      return;
-    }
-    api.auth
-      .status()
-      .then((s) => {
-        if (s.authenticated) router.replace("/"); // already in (or there is no sign-in to do)
-        else setStatus(s);
-      })
-      .catch((e) => setError(errorMessage(e)));
-  }, [result, code, router]);
+    void app().init();
+  }, []);
+  useEffect(() => {
+    if (s.phase === "ready") router.replace("/");
+  }, [s.phase, router]);
 
   async function signIn() {
     setBusy(true);
     setError(null);
     try {
-      const { url } = await api.auth.start(`${window.location.origin}${BASE}/login/`);
-      window.location.href = url; // off to Google; it brings you back here
+      if (clientId.trim()) app().setClientId(clientId);
+      await app().signIn(); // the effect above moves on once the data is open
     } catch (e) {
-      setError(errorMessage(e));
+      setError(e instanceof Error ? e.message : "Sign-in didn't work");
       setBusy(false);
     }
   }
 
-  const checking = !status && !error && !(result === "ok" && code);
+  if (!s.booted || s.phase === "ready" || s.phase === "loading") return <Loading label={s.phase === "loading" ? "Opening your data" : "Loading"} />;
+
   return (
     <main className="mx-auto flex min-h-screen max-w-md items-center px-5">
       <Card className="w-full space-y-4">
         <div>
           <h1 className="text-[1.6rem] font-medium tracking-[-0.02em] text-heading">Corpo Mailer</h1>
-          <p className="mt-1 text-sm text-body">Sign in with the Google account you were given access with.</p>
+          <p className="mt-1 text-sm text-body">Sign in with Google. Your leads are kept in your own Google Drive and your emails go from your own Gmail.</p>
         </div>
 
-        {result === "ok" && code && !error ? (
-          <Loading label="Signing you in" />
-        ) : (
-          <>
-            {status && !status.configured && (
-              <p className="rounded-xl border border-hairline bg-white/[0.03] p-3 text-sm text-body">
-                Google sign-in isn&apos;t set up on this backend yet. Whoever runs it needs to add the Google client ID and secret (see docs/GMAIL_SETUP.md), and list the allowed accounts in ALLOWED_EMAILS.
-              </p>
-            )}
-            <ErrorNote message={error} />
-            <Button variant="primary" className="w-full gap-2.5" disabled={busy || checking || (status ? !status.configured : false)} onClick={signIn}>
-              <GoogleMark />
-              {busy ? "Opening Google…" : "Sign in with Google"}
-            </Button>
-          </>
+        {!s.client_id_set && (
+          <Field label="Google client ID (one-time setup)">
+            <Input value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="1234-abc.apps.googleusercontent.com" autoCapitalize="none" spellCheck={false} className="font-mono text-[0.8rem]" />
+            <span className="mt-1 block text-xs text-faint">Created once in Google Cloud, see docs/GMAIL_SETUP.md. It isn&apos;t a secret.</span>
+          </Field>
         )}
+        <ErrorNote message={error ?? s.error} />
+        <Button variant="primary" className="w-full gap-2.5" disabled={busy || (!s.client_id_set && !clientId.trim())} onClick={signIn}>
+          <GoogleMark />
+          {busy ? "Waiting for Google…" : "Sign in with Google"}
+        </Button>
 
-        <details className="text-sm" open={Boolean(error && /reach/i.test(error))}>
-          <summary className="cursor-pointer text-body hover:text-heading">Backend address</summary>
-          <div className="pt-3">
-            <BackendAddress />
-          </div>
+        <details className="text-sm">
+          <summary className="cursor-pointer text-body hover:text-heading">What it asks Google for</summary>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-body">
+            <li>Your email address, to know who you are.</li>
+            <li>A private file in your Drive that only this app can see: where your leads are saved.</li>
+            <li>Sending email as you, only when you approve and send a draft.</li>
+            <li>Reading your inbox, only to spot replies. It never changes, moves or deletes mail.</li>
+          </ul>
+          <p className="mt-2 text-xs text-faint">There is no server: this page talks to Google (and to OpenRouter for the AI) directly from your browser.</p>
         </details>
-        <p className="text-xs text-faint">
-          This page is only the interface. Google confirms who you are, and the backend decides whether that account may come in. Only your email address is shared with it.
-        </p>
       </Card>
     </main>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<Loading />}>
-      <LoginInner />
-    </Suspense>
   );
 }

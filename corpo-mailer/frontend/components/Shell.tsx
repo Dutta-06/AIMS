@@ -9,14 +9,13 @@ import CommandPalette from "@/components/CommandPalette";
 import Reveal from "@/components/motion/Reveal";
 import { snap, soft } from "@/components/motion/springs";
 import { api } from "@/lib/api";
-import { signOut, useSignedIn, useSignedInEmail } from "@/lib/auth";
+import { app, useApp } from "@/lib/engine/app";
 import { useQuery } from "@/lib/hooks";
 
 const NAV = [
   { href: "/", label: "Dashboard" },
   { href: "/leads", label: "Leads" },
   { href: "/companies", label: "Companies" },
-  { href: "/discovery", label: "Discovery" },
   { href: "/drafts", label: "Drafts" },
 ];
 
@@ -60,9 +59,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const reduce = useReducedMotion();
   const count = useReviewCount(pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // Only show Sign out when this browser actually holds a sign-in (a backend with no sign-in has none).
-  const signedIn = useSignedIn();
-  const email = useSignedInEmail();
+  const s = useApp();
+  const email = s.email;
+  const [renewing, setRenewing] = useState(false);
+  const [renewError, setRenewError] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -111,19 +111,48 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           >
             Settings
           </Link>
-          {signedIn && (
+          <button
+            type="button"
+            onClick={() => void app().signOut()}
+            title={email ? `Signed in as ${email}` : undefined}
+            aria-label={email ? `Sign out (signed in as ${email})` : "Sign out"}
+            className="flex h-full items-center rounded-full px-3 text-[0.82rem] text-body transition-colors hover:bg-glass hover:text-heading"
+          >
+            Sign out
+          </button>
+        </div>
+      </Reveal>
+
+      {(s.needs_reauth || s.save.state === "error") && (
+        <div role="status" className="mx-auto mt-4 flex max-w-[76rem] flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+          <span>
+            {s.needs_reauth
+              ? "Your Google sign-in expired, so changes aren't being saved. Press Continue to renew it. Nothing is lost."
+              : `Your latest changes haven't reached Google Drive yet (${s.save.error ?? "no connection"}). They're kept in this browser and will be retried.`}
+            {renewError && <span className="ml-2 text-danger">{renewError}</span>}
+          </span>
+          {s.needs_reauth && (
             <button
               type="button"
-              onClick={signOut}
-              title={email ? `Signed in as ${email}` : undefined}
-              aria-label={email ? `Sign out (signed in as ${email})` : "Sign out"}
-              className="flex h-full items-center rounded-full px-3 text-[0.82rem] text-body transition-colors hover:bg-glass hover:text-heading"
+              disabled={renewing}
+              onClick={async () => {
+                setRenewing(true);
+                setRenewError(null);
+                try {
+                  await app().renew();
+                } catch (e) {
+                  setRenewError(e instanceof Error ? e.message : "Couldn't renew");
+                } finally {
+                  setRenewing(false);
+                }
+              }}
+              className="rounded-full bg-action px-4 py-1.5 text-sm font-medium text-action-fg disabled:opacity-60"
             >
-              Sign out
+              {renewing ? "Waiting for Google…" : "Continue"}
             </button>
           )}
         </div>
-      </Reveal>
+      )}
 
       <motion.main
         key={pathname}

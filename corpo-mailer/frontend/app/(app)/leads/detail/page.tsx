@@ -356,7 +356,7 @@ function LeadView({ id }: { id: number }) {
       </p>
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <WordReveal as="h1" text={contactLabel(lead)} className="text-[2.4rem] font-medium leading-[1.1] tracking-[-0.02em] text-heading" />
+          <WordReveal as="h1" text={contactLabel(lead)} className="[overflow-wrap:anywhere] text-[2.4rem] font-medium leading-[1.1] tracking-[-0.02em] text-heading" />
           <p className="mt-2 text-[0.95rem] text-body">
             {lead.role ? `${lead.role} at ` : ""}
             <Link href={companyHref(lead.company_id)} className="text-heading hover:underline">

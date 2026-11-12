@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useApp } from "@/lib/engine/app";
 
 export function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong";
@@ -15,6 +16,9 @@ type QueryState<T> = { key: string; data?: T; error?: string };
 export function useQuery<T>(key: string, fn: () => Promise<T>) {
   const [state, setState] = useState<QueryState<T>>({ key: "" });
   const [tick, setTick] = useState(0);
+  // The data lives in this browser, so anything that changes it (a background reply check, another
+  // part of the page) refreshes what's shown without being asked.
+  const { data_version: version } = useApp();
   const fnRef = useRef(fn);
   useEffect(() => {
     fnRef.current = fn;
@@ -29,7 +33,7 @@ export function useQuery<T>(key: string, fn: () => Promise<T>) {
     return () => {
       cancelled = true;
     };
-  }, [key, tick]);
+  }, [key, tick, version]);
 
   const current = state.key === key;
   return {

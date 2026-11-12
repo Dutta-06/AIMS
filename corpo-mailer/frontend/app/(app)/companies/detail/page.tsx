@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import EnrichPanel from "@/components/EnrichPanel";
 import { soft } from "@/components/motion/springs";
 import WordReveal from "@/components/motion/WordReveal";
 import { useToast } from "@/components/ToastProvider";
@@ -157,7 +156,7 @@ function CompanyView({ id }: { id: number }) {
       </p>
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <WordReveal as="h1" text={company.name} className="text-[2.4rem] font-medium leading-[1.1] tracking-[-0.02em] text-heading" />
+          <WordReveal as="h1" text={company.name} className="[overflow-wrap:anywhere] text-[2.4rem] font-medium leading-[1.1] tracking-[-0.02em] text-heading" />
           {(company.industry || company.website) && (
             <p className="mt-2 text-[0.95rem] text-body">{[company.industry, company.website].filter(Boolean).join(" · ")}</p>
           )}
@@ -171,9 +170,6 @@ function CompanyView({ id }: { id: number }) {
         <div className="min-w-0 space-y-10">
           <section>
             <SectionTitle>Contacts</SectionTitle>
-            <div className="mb-4">
-              <EnrichPanel companyId={id} onSaved={reload} />
-            </div>
             <ErrorNote message={rowAction.error} />
             {contacts.length === 0 ? (
               <Empty>No contacts yet. Add someone you can email.</Empty>

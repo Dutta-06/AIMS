@@ -17,7 +17,7 @@ Harshit,Firebrand,Ivy Chan,https://www.linkedin.com/in/ivychan/,Chief Growth Off
 Ritwik,Tandem AI,Jon Ved,https://www.linkedin.com/in/jonved/,CEO,,Mail: jon.ved@tandem.example
 `;
 
-let clock = new Date("2026-03-10T10:00:00Z");
+const clock = new Date("2026-03-10T10:00:00Z");
 let core: Core;
 let saves = 0;
 beforeEach(() => {

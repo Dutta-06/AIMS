@@ -59,24 +59,6 @@ export type Interaction = {
 export type DraftStatus = "draft" | "approved" | "sending" | "sent";
 export type DraftKind = "intro" | "followup" | "thank_you";
 
-export type AuthStatus = {
-  required: boolean; // false: no accounts are listed on the backend, so there is no sign-in at all
-  configured: boolean; // the one-time Google setup is done
-  authenticated: boolean;
-  email: string | null;
-  allowed: string[]; // who may use the site (only shown to people who are signed in)
-};
-
-export type GmailStatus = {
-  configured: boolean; // the one-time Google setup is done on the backend
-  connected: boolean;
-  needs_reconnect: boolean;
-  email: string | null;
-  connected_at: string | null;
-  last_error: string | null;
-  redirect_uri: string;
-};
-
 export type Revision = { subject: string; body: string; feedback: string; at: string };
 
 export type Draft = {
@@ -136,53 +118,4 @@ export type ImportPreview = {
   truncated: boolean;
   columns: Record<string, string>;
   ignored_columns: string[];
-};
-
-export type ProspectState = "new" | "accepted" | "rejected" | "snoozed";
-export type Verdict = "unverified" | "verified" | "needs_check" | "failed";
-
-export type Evidence = {
-  url: string;
-  title: string;
-  kind: string;
-  snippet: string;
-  fetched_at: string | null;
-  last_modified: string | null;
-  signal: boolean;
-};
-
-export type Enrichment = {
-  company_id: number;
-  website: string | null;
-  website_is_new: boolean;
-  verdict: Verdict;
-  verdict_note: string;
-  evidence: Evidence[];
-  emails: { email: string; source_url: string; already_tracked: boolean }[];
-  linkedin_search_url: string;
-  checked_at: string;
-};
-
-export type SearchHit = { title: string; url: string; snippet: string; age: string | null; domain: string };
-
-export type Prospect = {
-  id: number;
-  name: string;
-  website: string | null;
-  domain: string | null;
-  industry: string | null;
-  why: string | null;
-  source: string | null;
-  state: ProspectState;
-  verdict: Verdict;
-  verdict_note: string | null;
-  checked_at: string | null;
-  expires_at: string | null;
-  snoozed_until: string | null;
-  stale: boolean;
-  evidence: Evidence[];
-  emails: { email: string; source_url: string }[];
-  linkedin_search_url: string;
-  company_id: number | null;
-  created_at: string;
 };

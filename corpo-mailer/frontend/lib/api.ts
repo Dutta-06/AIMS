@@ -1,212 +1,124 @@
-import type {
-  AuthStatus,
-  Channel,
-  Company,
-  Contact,
-  Dashboard,
-  Draft,
-  Enrichment,
-  GmailStatus,
-  Prospect,
-  ProspectState,
-  SearchHit,
-  DraftKind,
-  DraftStatus,
-  ImportPreview,
-  Interaction,
-  InteractionType,
-  ReplyStatus,
-  Status,
-  SyncResult,
-} from "./types";
+/**
+ * What the screens call. Everything runs in this browser (see lib/engine): the data is kept in the
+ * signed-in person's own Google Drive, and email goes through their own Gmail. There is no server.
+ */
+import { app } from "./engine/app";
+import type { CompanyInput, ContactInput, ContactPatch, InteractionInput } from "./engine/core";
+import { applyPlan, exportCsv, planImport, previewOf } from "./engine/importer";
+import { ApiError } from "./engine/errors";
+import type { DB, EventSettings } from "./engine/model";
+import { normaliseDb } from "./engine/model";
+import { invalid } from "./engine/errors";
+import type { Channel, Company, Contact, Dashboard, Draft, DraftKind, DraftStatus, ImportPreview, Interaction, ReplyStatus, Status, SyncResult } from "./types";
 
-import { getToken, signOut } from "./auth";
-import { backendUrl } from "./backend";
+export { ApiError };
+export type { CompanyInput, ContactInput, ContactPatch };
 
+const core = () => app().ready().core;
+const drafts = () => app().ready().drafts;
 
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-function detailMessage(body: unknown, fallback: string): string {
-  const detail = (body as { detail?: unknown } | null)?.detail;
-  if (typeof detail === "string") return detail;
-  if (Array.isArray(detail)) {
-    return detail
-      .map((d) => `${(d.loc ?? []).slice(1).join(".")}: ${d.msg}`.replace(/^: /, ""))
-      .join("; ")
-      .replace(/^Value error, /, "");
-  }
-  return fallback;
-}
-
-function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  const token = getToken();
-  return {
-    ...extra,
-    // The backend refuses changes without this (it is what stops other websites from
-    // making your browser trigger a send).
-    "X-Corpo-Mailer": "1",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  let res: Response;
+/** Engine calls are instant and in memory, but the screens expect promises. */
+const now = <T>(fn: () => T): Promise<T> => {
   try {
-    res = await fetch(`${backendUrl()}${path}`, {
-      ...init,
-      headers: authHeaders(init.body ? { "Content-Type": "application/json" } : {}),
-    });
-  } catch {
-    throw new ApiError(0, "Can't reach the server. Is the backend running?");
+    return Promise.resolve(fn());
+  } catch (e) {
+    return Promise.reject(e);
   }
-  // A 401 on a normal call means the sign-in ran out (or you were removed from the allowed accounts): back to sign-in.
-  if (res.status === 401 && !path.startsWith("/auth/")) signOut();
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new ApiError(res.status, detailMessage(body, `Request failed (${res.status})`));
-  }
-  return (res.status === 204 ? undefined : await res.json()) as T;
-}
-
-const json = (body: unknown) => ({ body: JSON.stringify(body) });
-const qs = (params: Record<string, string | number | boolean | undefined>) => {
-  const q = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "" && v !== false) q.set(k, String(v));
-  const s = q.toString();
-  return s ? `?${s}` : "";
 };
-
-export type CompanyInput = Partial<Omit<Company, "id" | "created_at">> & { name: string };
-export type ContactInput = {
-  company_id: number;
-  name?: string | null;
-  email?: string | null;
-  linkedin?: string | null;
-  role?: string | null;
-  status?: Status;
-  channels?: Channel[];
-  remarks?: string | null;
-  next_followup_at?: string | null;
-};
-export type ContactPatch = Partial<
-  Omit<ContactInput, "company_id"> & { do_not_contact: boolean; reply_unread: boolean }
->;
+const guarded = <T>(fn: () => Promise<T>) => app().guarded(fn);
 
 export const api = {
-  dashboard: () => request<Dashboard>("/dashboard"),
+  dashboard: (): Promise<Dashboard> => now(() => core().dashboard()),
 
   companies: {
-    list: (q?: string) => request<Company[]>(`/companies${qs({ q })}`),
-    get: (id: number) => request<Company>(`/companies/${id}`),
-    create: (b: CompanyInput) => request<Company>("/companies", { method: "POST", ...json(b) }),
-    update: (id: number, b: Partial<CompanyInput>) =>
-      request<Company>(`/companies/${id}`, { method: "PATCH", ...json(b) }),
-    remove: (id: number) => request<void>(`/companies/${id}`, { method: "DELETE" }),
+    list: (q?: string): Promise<Company[]> => now(() => core().listCompanies(q)),
+    get: (id: number): Promise<Company> => now(() => core().getCompany(id)),
+    create: (b: CompanyInput): Promise<Company> => now(() => core().createCompany(b)),
+    update: (id: number, b: Partial<CompanyInput>): Promise<Company> => now(() => core().updateCompany(id, b)),
+    remove: (id: number): Promise<void> => now(() => core().deleteCompany(id)),
   },
 
   contacts: {
-    list: (p: { company_id?: number; status?: Status; q?: string } = {}) =>
-      request<Contact[]>(`/contacts${qs(p)}`),
-    get: (id: number) => request<Contact>(`/contacts/${id}`),
-    create: (b: ContactInput) => request<Contact>("/contacts", { method: "POST", ...json(b) }),
-    update: (id: number, b: ContactPatch) =>
-      request<Contact>(`/contacts/${id}`, { method: "PATCH", ...json(b) }),
-    remove: (id: number) => request<void>(`/contacts/${id}`, { method: "DELETE" }),
-    interactions: (id: number) => request<Interaction[]>(`/contacts/${id}/interactions`),
-    log: (
-      id: number,
-      b: { type: InteractionType; channel?: Channel | null; subject?: string; content?: string },
-    ) => request<Interaction>(`/contacts/${id}/interactions`, { method: "POST", ...json(b) }),
-  },
-
-  discovery: {
-    list: (state: ProspectState | "all" = "new") => request<Prospect[]>(`/discovery${qs({ state })}`),
-    suggest: (b: { count: number; focus?: string }) =>
-      request<{ added: Prospect[]; skipped_duplicates: number }>("/discovery/suggest", { method: "POST", ...json(b) }),
-    enrich: (companyId: number) => request<Enrichment>(`/discovery/enrich/${companyId}`, { method: "POST" }),
-    applyEnrichment: (companyId: number, b: { set_website: boolean; emails: string[] }) =>
-      request<{ website_set: boolean; contacts_added: number; skipped: string[] }>(
-        `/discovery/enrich/${companyId}/apply`,
-        { method: "POST", ...json(b) },
-      ),
-    search: (query: string) => request<SearchHit[]>("/discovery/search", { method: "POST", ...json({ query }) }),
-    fromPage: (url: string) =>
-      request<{ added: Prospect[]; skipped_duplicates: number; found: number }>("/discovery/from-page", {
-        method: "POST",
-        ...json({ url }),
-      }),
-    verify: (id: number, website?: string) =>
-      request<Prospect>(`/discovery/${id}/verify`, { method: "POST", ...json(website ? { website } : {}) }),
-    accept: (id: number) =>
-      request<{ company_id: number; prospect: Prospect }>(`/discovery/${id}/accept`, { method: "POST" }),
-    reject: (id: number) => request<Prospect>(`/discovery/${id}/reject`, { method: "POST" }),
-    snooze: (id: number, days = 30) =>
-      request<Prospect>(`/discovery/${id}/snooze`, { method: "POST", ...json({ days }) }),
+    list: (p: { company_id?: number; status?: Status; q?: string } = {}): Promise<Contact[]> => now(() => core().listContacts(p)),
+    get: (id: number): Promise<Contact> => now(() => core().getContact(id)),
+    create: (b: ContactInput): Promise<Contact> => now(() => core().createContact(b)),
+    update: (id: number, b: ContactPatch): Promise<Contact> => now(() => core().updateContact(id, b)),
+    remove: (id: number): Promise<void> => now(() => core().deleteContact(id)),
+    interactions: (id: number): Promise<Interaction[]> => now(() => core().listInteractions(id)),
+    log: (id: number, b: InteractionInput): Promise<Interaction> => now(() => core().logInteraction(id, b)),
   },
 
   drafts: {
-    list: (p: { status?: DraftStatus; contact_id?: number } = {}) => request<Draft[]>(`/drafts${qs(p)}`),
-    generate: (b: { contact_id: number; kind: DraftKind; instructions?: string; channel?: Channel }) =>
-      request<Draft>("/drafts/generate", { method: "POST", ...json(b) }),
-    create: (b: { contact_id: number; subject: string; body: string }) =>
-      request<Draft>("/drafts", { method: "POST", ...json(b) }),
-    edit: (id: number, b: { subject?: string; body?: string }) =>
-      request<Draft>(`/drafts/${id}`, { method: "PATCH", ...json(b) }),
-    revise: (id: number, feedback: string) =>
-      request<Draft>(`/drafts/${id}/revise`, { method: "POST", ...json({ feedback }) }),
-    undo: (id: number) => request<Draft>(`/drafts/${id}/undo`, { method: "POST" }),
-    markSent: (id: number) => request<Draft>(`/drafts/${id}/mark-sent`, { method: "POST" }),
-    approve: (id: number) => request<Draft>(`/drafts/${id}/approve`, { method: "POST" }),
-    revoke: (id: number) => request<Draft>(`/drafts/${id}/revoke`, { method: "POST" }),
-    send: (id: number) => request<Draft>(`/drafts/${id}/send`, { method: "POST" }),
+    list: (p: { status?: DraftStatus; contact_id?: number } = {}): Promise<Draft[]> => now(() => drafts().list(p)),
+    generate: (b: { contact_id: number; kind: DraftKind; instructions?: string; channel?: Channel }): Promise<Draft> => drafts().generate(b),
+    create: (b: { contact_id: number; subject: string; body: string }): Promise<Draft> => now(() => drafts().create(b)),
+    edit: (id: number, b: { subject?: string; body?: string }): Promise<Draft> => now(() => drafts().edit(id, b)),
+    revise: (id: number, feedback: string): Promise<Draft> => drafts().revise(id, feedback),
+    undo: (id: number): Promise<Draft> => now(() => drafts().undo(id)),
+    markSent: (id: number): Promise<Draft> => now(() => drafts().markNoteSent(id)),
+    approve: (id: number): Promise<Draft> => drafts().approve(id),
+    revoke: (id: number): Promise<Draft> => now(() => drafts().revoke(id)),
+    send: (id: number): Promise<Draft> => guarded(() => drafts().send(id)),
   },
 
   replies: {
-    status: () => request<ReplyStatus>("/replies/status"),
-    sync: () => request<SyncResult>("/replies/sync", { method: "POST" }),
+    status: (): Promise<ReplyStatus> =>
+      now(() => {
+        const a = app();
+        const mb = core().db.mailbox;
+        return { configured: a.state.phase === "ready", polling: true, last_sync_at: mb.last_sync_at, last_error: mb.last_error };
+      }),
+    sync: (): Promise<SyncResult> => app().syncReplies(),
   },
 
   import: {
-    preview: (csv: string, o: { overwrite: boolean; infer_status: boolean }) =>
-      request<ImportPreview>("/import/preview", { method: "POST", ...json({ csv, ...o }) }),
-    commit: (csv: string, o: { overwrite: boolean; infer_status: boolean }) =>
-      request<ImportPreview["summary"]>("/import/commit", { method: "POST", ...json({ csv, ...o }) }),
-    /** The file needs the sign-in token, so it can't be a plain link: fetch it, then save it. */
-    exportCsv: async (): Promise<Blob> => {
-      let res: Response;
-      try {
-        res = await fetch(`${backendUrl()}/export.csv`, { headers: authHeaders() });
-      } catch {
-        throw new ApiError(0, "Can't reach the server. Is the backend running?");
-      }
-      if (res.status === 401) signOut();
-      if (!res.ok) throw new ApiError(res.status, `Export failed (${res.status})`);
-      return res.blob();
-    },
+    preview: (csv: string, o: { overwrite: boolean; infer_status: boolean }): Promise<ImportPreview> =>
+      now(() => previewOf(planImport(core(), csv, o.overwrite, o.infer_status))),
+    commit: (csv: string, o: { overwrite: boolean; infer_status: boolean }): Promise<ImportPreview["summary"]> =>
+      now(() => applyPlan(core(), planImport(core(), csv, o.overwrite, o.infer_status))),
+    exportCsv: (): Promise<Blob> => now(() => new Blob([exportCsv(core())], { type: "text/csv;charset=utf-8" })),
   },
 
-  gmail: {
-    status: () => request<GmailStatus>("/gmail/status"),
-    connect: (returnTo: string) =>
-      request<{ url: string }>("/gmail/connect", { method: "POST", ...json({ return_to: returnTo }) }),
-    disconnect: () => request<{ disconnected: boolean }>("/gmail/disconnect", { method: "POST" }),
+  settings: {
+    get: (): Promise<EventSettings> => now(() => ({ ...core().db.settings })),
+    update: (b: Partial<EventSettings>): Promise<EventSettings> =>
+      now(() => {
+        const c = core();
+        const s = c.db.settings;
+        if (b.event_name !== undefined) s.event_name = b.event_name.trim() || s.event_name;
+        if (b.event_pitch !== undefined) s.event_pitch = b.event_pitch;
+        if (b.sender_signature !== undefined) s.sender_signature = b.sender_signature;
+        if (b.from_name !== undefined) s.from_name = b.from_name.trim();
+        if (b.stale_after_days !== undefined) {
+          if (!Number.isInteger(b.stale_after_days) || b.stale_after_days < 1 || b.stale_after_days > 365) throw invalid("Quiet days must be a whole number from 1 to 365");
+          s.stale_after_days = b.stale_after_days;
+        }
+        c.changed();
+        return { ...s };
+      }),
   },
 
-  auth: {
-    status: () => request<AuthStatus>("/auth/status"),
-    start: (returnTo: string) =>
-      request<{ url: string }>("/auth/google/start", { method: "POST", ...json({ return_to: returnTo }) }),
-    exchange: (code: string) =>
-      request<{ token: string; expires_at: number; email: string }>("/auth/exchange", {
-        method: "POST",
-        ...json({ code }),
+  ai: {
+    /** Asks the AI a trivial question to check the key and models work. */
+    test: (): Promise<string> => app().testAi(),
+  },
+
+  /** A full copy of the data as a file (a backup), and putting one back. */
+  backup: {
+    export: (): Promise<Blob> => now(() => new Blob([JSON.stringify(core().db, null, 2)], { type: "application/json" })),
+    restore: (text: string): Promise<{ companies: number; leads: number }> =>
+      now(() => {
+        let raw: unknown;
+        try {
+          raw = JSON.parse(text);
+        } catch {
+          throw invalid("That file isn't a Corpo Mailer backup");
+        }
+        const o = raw as Partial<DB> | null;
+        if (!o || typeof o !== "object" || !Array.isArray(o.companies) || !Array.isArray(o.contacts)) throw invalid("That file isn't a Corpo Mailer backup");
+        const db = normaliseDb(o);
+        app().restoreBackup(db);
+        return { companies: db.companies.length, leads: db.contacts.length };
       }),
   },
 };
