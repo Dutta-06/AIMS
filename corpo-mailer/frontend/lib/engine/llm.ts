@@ -57,7 +57,7 @@ export class OpenRouterLLM implements LLM {
 
   async complete({ system, user }: { system: string; user: string }): Promise<string> {
     const keys = parseKeys(this.o.apiKey());
-    if (!keys.length) throw new LLMError("Add your OpenRouter key in Settings to use the AI");
+    if (!keys.length) throw new LLMError("No AI key is set up yet. An admin can add the team's keys under Settings → Team keys.");
     const doFetch = this.o.fetchImpl ?? fetch;
     const base = this.o.baseUrl ?? "https://openrouter.ai/api/v1";
     const errors: string[] = [];

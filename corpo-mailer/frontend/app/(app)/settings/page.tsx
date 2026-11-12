@@ -209,60 +209,71 @@ function BackupCard({ onRestored }: { onRestored: () => void }) {
   );
 }
 
+const MASK = { WebkitTextSecurity: "disc" } as React.CSSProperties;
+
 function AiCard() {
   const s = useApp();
   void s; // re-render when settings change
   const toast = useToast();
-  const [key, setKey] = useState(() => app().openrouterKey());
-  const [show, setShow] = useState(false);
-  const count = parseKeys(key).length;
   const [teamKeys, setTeamKeys] = useState(() => app().core?.db.settings.team_ai_keys ?? "");
-  const teamCount = parseKeys(teamKeys).length;
+  const [ownKeys, setOwnKeys] = useState(() => app().openrouterKey());
   const [models, setModels] = useState(() => (app().models().join(", ") === DEFAULT_MODELS.join(", ") ? "" : app().models().join(", ")));
+  const [show, setShow] = useState(false);
   const test = useAction();
   const [answer, setAnswer] = useState<string | null>(null);
+  const teamCount = parseKeys(teamKeys).length;
+  const ownCount = parseKeys(ownKeys).length;
+  const savedTeam = parseKeys(app().core?.db.settings.team_ai_keys ?? "").length;
+  const style = show ? undefined : MASK;
+
+  const save = async () => {
+    app().setOpenrouterKey(ownKeys);
+    app().setModels(models);
+    await api.settings.update({ team_ai_keys: teamKeys });
+  };
+
   return (
     <Card className="space-y-3">
       <h2 className="flex items-center gap-2 text-[1.05rem] font-medium text-heading">
         The AI (OpenRouter)
-        {app().openrouterKeyCount() > 0 ? <Pill tone="green">{app().openrouterKeyCount() === 1 ? "Key saved" : `${app().openrouterKeyCount()} keys saved`}</Pill> : <Pill tone="amber">No key yet</Pill>}
+        {savedTeam > 0 ? <Pill tone="green">{`${savedTeam} team ${savedTeam === 1 ? "key" : "keys"} shared`}</Pill> : <Pill tone="amber">Nothing shared with the team yet</Pill>}
       </h2>
       <p className="text-sm text-body">
-        Drafts and revisions use OpenRouter&apos;s free models. Paste your key from openrouter.ai/keys. Keys are only ever sent to openrouter.ai. Put the team&apos;s keys (one per line) in <b>Team keys</b> so everyone gets them automatically, or keep one only for this browser in the first box. Requests take turns across all the keys and a rate-limited key hands over to the next. Keys only add up when they belong to different OpenRouter accounts.
+        Drafts and revisions use OpenRouter&apos;s free models. Put the team&apos;s keys here, one per line, and <b>everyone on the team can use them</b> straight away, on any device. Requests take turns across the keys and a rate-limited key hands over to the next. Keys only add up when they belong to different OpenRouter accounts.
       </p>
-      <Field label={count > 1 ? `OpenRouter keys (${count}, one per line)` : "OpenRouter key (one per line if you have several)"}>
+      <Field label={`Team keys (${teamCount}, one per line)`}>
         <Textarea
-          rows={count > 1 || show ? Math.min(Math.max(count, 2), 6) : 2}
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="sk-or-…"
-          autoComplete="off"
-          autoCapitalize="none"
-          spellCheck={false}
-          className="font-mono text-[0.85rem]"
-          style={{ WebkitTextSecurity: show ? "none" : "disc" } as React.CSSProperties}
-        />
-      </Field>
-      <Field label={`Team keys (${teamCount} shared, one per line)`}>
-        <Textarea
-          rows={Math.min(Math.max(teamCount, 2), 6)}
+          rows={Math.min(Math.max(teamCount, 3), 8)}
           value={teamKeys}
           onChange={(e) => setTeamKeys(e.target.value)}
-          placeholder="sk-or-… (one per teammate)"
+          placeholder="sk-or-… (one per line)"
           autoComplete="off"
           autoCapitalize="none"
           spellCheck={false}
           className="font-mono text-[0.85rem]"
-          style={{ WebkitTextSecurity: show ? "none" : "disc" } as React.CSSProperties}
+          style={style}
         />
-        <span className="mt-1 block text-xs text-faint">Shared with everyone in the workspace through the shared file, so nobody sets keys up again on a new device. Anyone who can open that file can read these keys.</span>
+        <span className="mt-1 block text-xs text-faint">Saved in the shared file. Anyone who can open that file can read these keys.</span>
       </Field>
+      {ownCount > 0 && teamCount === 0 && (
+        <div className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3 text-sm text-amber-100">
+          <p>
+            You have {ownCount} {ownCount === 1 ? "key" : "keys"} saved on <b>this browser only</b>. Your teammates can&apos;t use {ownCount === 1 ? "it" : "them"} and will see &ldquo;add your key&rdquo;.
+          </p>
+          <Button small onClick={() => setTeamKeys(parseKeys(`${teamKeys}\n${ownKeys}`).join("\n"))}>
+            Move {ownCount === 1 ? "it" : "them"} into Team keys
+          </Button>
+        </div>
+      )}
       <button type="button" className="text-xs text-body underline underline-offset-2 hover:text-heading" onClick={() => setShow((v) => !v)}>
         {show ? "Hide the keys" : "Show the keys"}
       </button>
       <details className="text-sm">
-        <summary className="cursor-pointer text-body hover:text-heading">Choose the models (advanced)</summary>
-        <div className="pt-2">
+        <summary className="cursor-pointer text-body hover:text-heading">Advanced: a key only for this browser, and the models</summary>
+        <div className="space-y-3 pt-2">
+          <Field label={`Keys only on this browser (${ownCount}), optional`}>
+            <Textarea rows={2} value={ownKeys} onChange={(e) => setOwnKeys(e.target.value)} placeholder="sk-or-…" autoComplete="off" autoCapitalize="none" spellCheck={false} className="font-mono text-[0.85rem]" style={style} />
+          </Field>
           <Field label="Models, comma-separated (empty = the four free defaults, rotated)">
             <Input value={models} onChange={(e) => setModels(e.target.value)} placeholder={DEFAULT_MODELS.join(", ")} spellCheck={false} className="font-mono text-[0.78rem]" />
           </Field>
@@ -274,20 +285,16 @@ function AiCard() {
         <Button
           variant="primary"
           onClick={async () => {
-            app().setOpenrouterKey(key);
-            app().setModels(models);
-            await api.settings.update({ team_ai_keys: teamKeys });
+            await save();
             toast("AI settings saved");
           }}
         >
           Save
         </Button>
         <Button
-          disabled={test.busy || (!key.trim() && !teamKeys.trim())}
+          disabled={test.busy || (!teamKeys.trim() && !ownKeys.trim())}
           onClick={async () => {
-            app().setOpenrouterKey(key);
-            app().setModels(models);
-            await api.settings.update({ team_ai_keys: teamKeys });
+            await save();
             setAnswer(null);
             let r = "";
             if (await test.run(async () => (r = await api.ai.test()))) setAnswer(r);
