@@ -111,7 +111,7 @@ function WorkspaceCard() {
           </Button>
         </div>
       </Field>
-      <p className="text-xs text-faint">They also need to be allowed to sign in to the app (Google Cloud → Audience → Test users). Then they open the site, sign in, and choose this file.</p>
+      <p className="text-xs text-faint">They also need to be allowed to sign in to the app (Google Cloud → Audience → Test users, unless your project is Internal to your organisation). Then they just open the site and sign in: they land on this same dashboard by themselves, on any device.</p>
       <ErrorNote message={share.error ?? refresh.error} />
       <div className="flex flex-wrap gap-2">
         <Button

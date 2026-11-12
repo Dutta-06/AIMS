@@ -17,8 +17,6 @@ import { DEFAULT_MODELS, OpenRouterLLM, parseKeys } from "./llm";
 import type { LLM } from "./llm";
 import type { DB } from "./model";
 import { emptyDb, normaliseDb } from "./model";
-import { pickFile } from "./google/picker";
-import type { Picked } from "./google/picker";
 import { Persistence } from "./persistence";
 import type { SaveStatus } from "./persistence";
 import type { MailboxReader } from "./replies";
@@ -39,8 +37,6 @@ export type AppState = {
   client_id_set: boolean;
   /** The shared file this person works in (null until they create or join one). */
   workspace: Workspace | null;
-  /** The file picker can be used (it needs a Google API key and project number). */
-  picker_ready: boolean;
   /** Bumped whenever the data changes, so screens that read it can refresh. */
   data_version: number;
   restored_unsaved: boolean;
@@ -55,8 +51,6 @@ const KEEPALIVE_MS = 60_000;
 /** Browser settings that are never sent anywhere but the service they're for. */
 export const LOCAL_KEYS = {
   clientId: "corpo.googleClientId",
-  apiKey: "corpo.googleApiKey",
-  appId: "corpo.googleAppId",
   openrouterKey: "corpo.openrouterKey",
   models: "corpo.models",
   workspace: (email: string) => `corpo.workspace.${email.toLowerCase()}`,
@@ -66,9 +60,6 @@ export type AppOptions = {
   store?: KeyValueStore; // persistent (localStorage)
   session?: KeyValueStore; // per-tab (sessionStorage)
   defaultClientId?: string;
-  defaultApiKey?: string;
-  defaultAppId?: string;
-  picker?: (auth: GoogleAuth, cfg: { apiKey: string; appId: string }) => Promise<Picked | null>;
   pollMs?: number;
   gis?: () => Promise<Gis>;
   drive?: (auth: GoogleAuth) => DriveLike;
@@ -105,9 +96,8 @@ export class App {
       now: o.now ? () => o.now!().getTime() : undefined,
       store: o.session,
     });
-    this.state = { phase: "signed_out", email: null, error: null, needs_reauth: false, save: SIGNED_OUT, client_id_set: false, workspace: null, picker_ready: false, data_version: 0, restored_unsaved: false, booted: false };
+    this.state = { phase: "signed_out", email: null, error: null, needs_reauth: false, save: SIGNED_OUT, client_id_set: false, workspace: null, data_version: 0, restored_unsaved: false, booted: false };
     this.state.client_id_set = !!this.clientId();
-    this.state.picker_ready = !!(this.apiKey() && this.appId());
   }
 
   // ------------------------------------------------------------------ browser-only settings
@@ -132,17 +122,6 @@ export class App {
   setClientId(v: string) {
     this.write(LOCAL_KEYS.clientId, v.trim());
     this.patch({ client_id_set: !!this.clientId() });
-  }
-  apiKey(): string {
-    return (this.read(LOCAL_KEYS.apiKey) || this.o.defaultApiKey || "").trim();
-  }
-  appId(): string {
-    return (this.read(LOCAL_KEYS.appId) || this.o.defaultAppId || "").trim();
-  }
-  setPickerConfig(apiKey: string, appId: string) {
-    this.write(LOCAL_KEYS.apiKey, apiKey.trim());
-    this.write(LOCAL_KEYS.appId, appId.trim());
-    this.patch({ picker_ready: !!(this.apiKey() && this.appId()) });
   }
   /** The keys saved in this browser only. */
   openrouterKey(): string {
@@ -401,17 +380,25 @@ export class App {
     await this.openWorkspace(email, w);
   }
 
-  /** Everyone else: pick the file a teammate shared. */
-  async joinWorkspace(): Promise<void> {
+  private finding = false;
+  /** Look again for the team's file (a teammate may just have added this account). True once it is found and opened. */
+  async findWorkspace(quiet = false): Promise<boolean> {
     const email = this.state.email;
-    if (!email || !this.drive) throw new ApiError(401, "Sign in with Google to continue");
-    this.patch({ error: null });
-    const pick = this.o.picker ?? pickFile;
-    const picked = await this.guarded(() => pick(this.auth, { apiKey: this.apiKey(), appId: this.appId() }));
-    if (!picked) return;
-    const w = { id: picked.id, name: picked.name };
-    this.saveWorkspace(email, w);
-    await this.openWorkspace(email, w);
+    if (!email || !this.drive || this.state.phase !== "needs_workspace" || this.finding) return false;
+    this.finding = true;
+    try {
+      const found = await this.guarded(() => this.drive!.find(WORKSPACE_FILE_NAME));
+      if (!found) return false;
+      const w = { id: found.id, name: found.name ?? WORKSPACE_FILE_NAME };
+      this.saveWorkspace(email, w);
+      await this.openWorkspace(email, w);
+      return true;
+    } catch (e) {
+      if (quiet) return false;
+      throw e;
+    } finally {
+      this.finding = false;
+    }
   }
 
   /** Stop using this shared file in this browser (it isn't deleted). */
@@ -532,8 +519,6 @@ export function app(): App {
       store: typeof window === "undefined" ? undefined : safeStore(() => window.localStorage),
       session: typeof window === "undefined" ? undefined : safeStore(() => window.sessionStorage),
       defaultClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-      defaultApiKey: process.env.NEXT_PUBLIC_GOOGLE_API_KEY,
-      defaultAppId: process.env.NEXT_PUBLIC_GOOGLE_APP_ID,
     });
   }
   return instance;
@@ -544,7 +529,7 @@ export function setApp(a: App | null) {
   instance = a;
 }
 
-const SERVER_STATE: AppState = { phase: "loading", email: null, error: null, needs_reauth: false, save: SIGNED_OUT, client_id_set: false, workspace: null, picker_ready: false, data_version: 0, restored_unsaved: false, booted: false };
+const SERVER_STATE: AppState = { phase: "loading", email: null, error: null, needs_reauth: false, save: SIGNED_OUT, client_id_set: false, workspace: null, data_version: 0, restored_unsaved: false, booted: false };
 
 export function useApp(): AppState {
   return useSyncExternalStore(

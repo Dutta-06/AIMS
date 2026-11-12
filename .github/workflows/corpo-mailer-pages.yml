@@ -46,11 +46,6 @@ jobs:
           # The Google "client ID" (not a secret). Set it as a repository variable named
           # GOOGLE_CLIENT_ID; if it is empty, the login page asks for it instead.
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-          # For the file picker teammates use to join the shared workspace (also not secrets, they are
-          # locked to this site in Google Cloud). Repository variables GOOGLE_API_KEY and GOOGLE_APP_ID
-          # (the project number). If empty, the join screen asks for them.
-          NEXT_PUBLIC_GOOGLE_API_KEY: ${{ vars.GOOGLE_API_KEY }}
-          NEXT_PUBLIC_GOOGLE_APP_ID: ${{ vars.GOOGLE_APP_ID }}
       - run: touch out/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:

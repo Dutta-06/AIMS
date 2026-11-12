@@ -28,12 +28,12 @@ npm test                        # vitest: the engine (leads, import, drafts, app
 ```
 lib/engine/        the app itself, no UI: core (leads), importer, drafts + approval gate, replies,
                    persistence (debounced Drive saves), app (singleton the UI reads)
-lib/engine/google/ Google sign-in (token model), shared Drive file, file picker, Gmail send/read
+lib/engine/google/ Google sign-in (token model), shared Drive file, Gmail send/read
 lib/api.ts         thin facade the pages call
 ```
 
-* Data is one JSON file, *Corpo Mailer shared data*, in Google Drive, shared by the team (the app has
-  only the narrow `drive.file` permission; teammates open it through Google's file picker). A save
+* Data is one JSON file, *Corpo Mailer shared data*, in Google Drive, shared by the team (the app asks for Google's `drive`
+  permission so an added teammate's sign-in finds the file by itself; it only touches that file). A save
   never overwrites: it reads the file, merges this person's changes onto it (`lib/engine/merge.ts`:
   per-record, later edit wins, deletions kept as tombstones, a sent email stays sent), then writes.
   A background check (about every 30 s) brings in teammates' changes. A spare copy is kept in the
@@ -47,7 +47,7 @@ lib/api.ts         thin facade the pages call
   than repeated.
 * **Replies** are matched by Message-ID / Gmail thread (sender address as fallback); auto-replies and
   your own mail are ignored; bounces mark the lead do-not-contact.
-* Browser settings (`corpo.googleClientId`, `corpo.googleApiKey`, `corpo.googleAppId`, `corpo.openrouterKey` (this browser's own keys, one per line; the team's keys live in the shared file's settings), `corpo.models`, `corpo.workspace.<email>`) live in local storage.
+* Browser settings (`corpo.googleClientId`, `corpo.openrouterKey` (this browser's own keys, one per line; the team's keys live in the shared file's settings), `corpo.models`, `corpo.workspace.<email>`) live in local storage.
 
 ## What the AI is told
 
