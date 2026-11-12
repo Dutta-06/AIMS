@@ -5,7 +5,6 @@ import type { Gis, KeyValueStore } from "./auth";
 import { google } from "./api";
 import { DriveStore } from "./drive";
 import { buildRaw, encodeWords, GmailApi, oneLine } from "./gmail";
-import { pickFile } from "./picker";
 
 // ------------------------------------------------------------------ fakes
 type Req = { prompt?: string; hint?: string };
@@ -85,7 +84,7 @@ describe("signing in with Google", () => {
   it("asks for exactly the permissions the app uses, in one go, with the account chooser", async () => {
     const t = await auth.signIn();
     expect(gis.requests).toEqual([{ prompt: "select_account" }]);
-    expect(SCOPES).toEqual(["openid", "email", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"]);
+    expect(SCOPES).toEqual(["openid", "email", "https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"]);
     expect(t).toEqual({ access_token: "tok-1", expires_at: now + 3_600_000, email: "team@gmail.com" });
     expect(bearer(calls[0])).toBe("Bearer tok-1"); // asked Google who it is, with the new token
   });
@@ -421,40 +420,5 @@ describe("the Gmail API", () => {
     on(/messages\?q=/, () => json({ messages: Array.from({ length: 130 }, (_, i) => ({ id: `m${i}` })), nextPageToken: "more" })); // 3 pages = 390, more than the cap
     on(/messages\/m\d+\?format=full/, (url) => json({ id: url.match(/messages\/(m\d+)\?/)![1], payload: { headers: [] } }));
     expect(await gmail.fetch({ sinceMs: 0, skipIds: new Set() })).toHaveLength(300);
-  });
-});
-
-// ------------------------------------------------------------------ the file picker
-describe("choosing the shared file", () => {
-  const cfg = { apiKey: "key-1", appId: "123456" };
-  const fakePicker = (result: { action: string; docs?: { id: string; name: string }[] }) => {
-    const seen: { token: string; apiKey: string; appId: string }[] = [];
-    return {
-      seen,
-      load: async () => ({
-        show: (o: { token: string; apiKey: string; appId: string; onResult: (r: typeof result) => void }) => {
-          seen.push({ token: o.token, apiKey: o.apiKey, appId: o.appId });
-          o.onResult(result);
-        },
-      }),
-    };
-  };
-
-  it("returns the file the person picked, using their sign-in and the configured key", async () => {
-    await auth.signIn();
-    const p = fakePicker({ action: "picked", docs: [{ id: "f9", name: "Corpo Mailer shared data" }] });
-    expect(await pickFile(auth, cfg, p.load)).toEqual({ id: "f9", name: "Corpo Mailer shared data" });
-    expect(p.seen[0]).toMatchObject({ apiKey: "key-1", appId: "123456", token: expect.stringMatching(/^tok-/) });
-  });
-
-  it("returns null when the person closes it", async () => {
-    await auth.signIn();
-    expect(await pickFile(auth, cfg, fakePicker({ action: "cancel" }).load)).toBeNull();
-  });
-
-  it("says what is missing if the API key or project number isn't set", async () => {
-    await auth.signIn();
-    const e = (await pickFile(auth, { apiKey: "", appId: "1" }, fakePicker({ action: "cancel" }).load).catch((x) => x)) as ApiError;
-    expect([e.status, e.message]).toEqual([409, expect.stringMatching(/API key and project number/)]);
   });
 });

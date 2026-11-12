@@ -1,8 +1,9 @@
 /**
  * Where the data lives: one JSON file in Google Drive that the whole team shares.
  *
- * The app only gets the narrow `drive.file` permission: it can reach the one file it created, or one
- * a person picked in Google's file picker, and nothing else in their Drive.
+ * The app asks for Google's `drive` permission so that a teammate who has been added to the file can
+ * simply sign in and have the app find it (the narrower `drive.file` permission would make every
+ * teammate pick the file by hand). The app only ever looks for, reads and writes that one file.
  */
 import type { GoogleAuth } from "./auth";
 import { google } from "./api";
@@ -22,7 +23,7 @@ export interface DriveFile {
 export type Collaborator = { email: string; name: string | null; role: string };
 
 export interface DriveLike {
-  /** The workspace file this account has already been given access to (created, or picked once on any device), newest first. */
+  /** The team's file, if this account owns it or has been added to it (newest first if there are several). */
   find(name: string): Promise<DriveFile | null>;
   meta(id: string): Promise<DriveFile>;
   read(id: string): Promise<string>;

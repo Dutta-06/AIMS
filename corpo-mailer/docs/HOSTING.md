@@ -2,15 +2,15 @@
 
 The app is plain static files, so GitHub Pages is the whole deployment: no server, no database.
 
-1. Do the Google setup in [`GMAIL_SETUP.md`](GMAIL_SETUP.md) and note the client ID, API key and project number.
+1. Do the Google setup in [`GMAIL_SETUP.md`](GMAIL_SETUP.md) and note the client ID.
 2. In the repo: **Settings → Pages → Source: GitHub Actions**. If the deploy says your branch isn't allowed, add it under **Settings → Environments → github-pages → Deployment branches**, or deploy from `main`.
-3. (Recommended) **Settings → Secrets and variables → Actions → Variables**: add `GOOGLE_CLIENT_ID`, `GOOGLE_API_KEY` and `GOOGLE_APP_ID`.
+3. (Recommended) **Settings → Secrets and variables → Actions → Variables**: add `GOOGLE_CLIENT_ID`.
 4. Push to `main` (or `corpo-mailer`), or run **Actions → Corpo Mailer website → Run workflow**. The
    workflow lints, type-checks, runs the tests, builds, and publishes
    `https://<user>.github.io/<repo>/`.
 5. Open the site and **Sign in with Google**. The first person starts the team workspace and shares it
-   with teammates (Settings → Team workspace); everyone else chooses that file once. Each person then
-   pastes their OpenRouter key(s) in **Settings** and presses *Save and test*.
+   with teammates (Settings → Team workspace); everyone else just signs in with the email that was added.
+   Put the team's OpenRouter keys in **Settings → Team keys** once, and press *Save and test*.
 
 ## Is it safe that the site is public?
 

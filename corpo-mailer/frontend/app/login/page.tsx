@@ -68,7 +68,7 @@ export default function LoginPage() {
           <summary className="cursor-pointer text-body hover:text-heading">What it asks Google for</summary>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-body">
             <li>Your email address, to know who you are.</li>
-            <li>Google Drive, but only the one shared workspace file: the app can open the file it creates or the one you choose, and nothing else in your Drive.</li>
+            <li>Google Drive, to find and update the team&apos;s one shared workspace file (Google words this as access to your Drive; the app only ever touches that file).</li>
             <li>Sending email as you, only when you approve and send a draft.</li>
             <li>Reading your inbox, only to spot replies. It never changes, moves or deletes mail.</li>
           </ul>

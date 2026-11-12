@@ -1,73 +1,69 @@
 "use client";
 
-import { useState } from "react";
-import { Button, Card, ErrorNote, Field, Input } from "@/components/ui";
+import { useEffect, useState } from "react";
+import { Button, Card, ErrorNote } from "@/components/ui";
 import { app, useApp } from "@/lib/engine/app";
 import { useAction } from "@/lib/hooks";
 
+const LOOK_AGAIN_MS = 10_000;
+
 /**
- * Shown once, after signing in, until this person is using the team's shared file: either they start
- * it (the first person) or they pick the one a teammate shared with them.
+ * Shown when this Google account hasn't been added to a team workspace yet (or the team has none).
+ * Once a teammate adds the account in Settings, the app notices by itself and opens it.
  */
 export default function WorkspaceSetup() {
   const s = useApp();
   const create = useAction();
-  const join = useAction();
-  const [apiKey, setApiKey] = useState("");
-  const [appId, setAppId] = useState("");
+  const look = useAction();
+  const [confirmNew, setConfirmNew] = useState(false);
+
+  // A teammate may add this account at any moment: keep looking, so there is nothing to press.
+  useEffect(() => {
+    const t = setInterval(() => void app().findWorkspace(true), LOOK_AGAIN_MS);
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-xl items-center px-5 py-10">
       <div className="w-full space-y-4">
         <div>
-          <h1 className="text-[1.6rem] font-medium tracking-[-0.02em] text-heading">Set up your team&apos;s workspace</h1>
+          <h1 className="text-[1.6rem] font-medium tracking-[-0.02em] text-heading">Waiting to be added to the team</h1>
           <p className="mt-1 text-sm text-body">
-            Everyone works from <b>one shared file in Google Drive</b>, so the whole team sees the same leads, drafts and history. Signed in as <span className="font-mono text-[0.85rem] text-heading">{s.email}</span>.
+            Signed in as <span className="font-mono text-[0.85rem] text-heading">{s.email}</span>. This account hasn&apos;t been added to the team&apos;s dashboard yet.
           </p>
         </div>
 
         <ErrorNote message={s.error} />
 
         <Card className="space-y-3">
-          <h2 className="text-[1.05rem] font-medium text-heading">My team already has one</h2>
+          <h2 className="text-[1.05rem] font-medium text-heading">Ask a teammate to add you</h2>
           <p className="text-sm text-body">
-            Ask a teammate to open <b>Settings → Team workspace</b> and add <span className="font-mono text-[0.85rem]">{s.email}</span>. Google emails you a link. Then choose the file here.
+            Someone already on the team opens <b>Settings → Team workspace</b> and adds <span className="font-mono text-[0.85rem]">{s.email}</span>. This page checks every few seconds and takes you in as soon as that happens. There is nothing else to set up.
           </p>
-          {!s.picker_ready && (
-            <div className="space-y-2 rounded-xl border border-hairline p-3">
-              <p className="text-xs text-faint">The file picker needs two values from the Google Cloud setup (docs/GMAIL_SETUP.md, step 4). They aren&apos;t secret. Your team lead can set them once for everyone, or paste them here.</p>
-              <Field label="Google API key">
-                <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="AIza…" autoCapitalize="none" spellCheck={false} className="font-mono text-[0.8rem]" />
-              </Field>
-              <Field label="Project number">
-                <Input value={appId} onChange={(e) => setAppId(e.target.value)} placeholder="123456789012" inputMode="numeric" className="font-mono text-[0.8rem]" />
-              </Field>
-            </div>
-          )}
-          <ErrorNote message={join.error} />
-          <Button
-            variant="primary"
-            disabled={join.busy || (!s.picker_ready && (!apiKey.trim() || !appId.trim()))}
-            onClick={() =>
-              void join.run(async () => {
-                if (!s.picker_ready) app().setPickerConfig(apiKey, appId);
-                await app().joinWorkspace();
-              })
-            }
-          >
-            {join.busy ? "Opening…" : "Choose the shared file"}
+          <ErrorNote message={look.error} />
+          <Button variant="primary" disabled={look.busy} onClick={() => void look.run(() => app().findWorkspace())}>
+            {look.busy ? "Checking…" : "Check now"}
           </Button>
         </Card>
 
         <Card className="space-y-3">
-          <h2 className="text-[1.05rem] font-medium text-heading">I&apos;m the first one</h2>
+          <h2 className="text-[1.05rem] font-medium text-heading">Is your team starting from scratch?</h2>
           <p className="text-sm text-body">
-            Creates a file called <i>Corpo Mailer shared data</i> in your Google Drive. Then you add your teammates in <b>Settings</b>. Only start one if nobody on the team has yet, or you&apos;ll end up with two separate workspaces.
+            Only the <b>first</b> person does this. It creates the team&apos;s shared file in your Google Drive, and then you add everyone else in Settings. If a teammate already has a dashboard, ask them to add you instead, or you&apos;ll end up with two separate ones.
           </p>
           <ErrorNote message={create.error} />
-          <Button disabled={create.busy} onClick={() => void create.run(() => app().createWorkspace())}>
-            {create.busy ? "Creating…" : "Start the team workspace"}
-          </Button>
+          {confirmNew ? (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="primary" disabled={create.busy} onClick={() => void create.run(() => app().createWorkspace())}>
+                {create.busy ? "Creating…" : "Yes, start a new team dashboard"}
+              </Button>
+              <Button variant="ghost" onClick={() => setConfirmNew(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={() => setConfirmNew(true)}>Start the team workspace</Button>
+          )}
         </Card>
 
         <Button variant="ghost" onClick={() => void app().signOut()}>

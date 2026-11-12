@@ -12,7 +12,7 @@ import { ApiError } from "../errors";
 export const SCOPES = [
   "openid",
   "email",
-  "https://www.googleapis.com/auth/drive.file", // only the shared workspace file this app creates or you pick
+  "https://www.googleapis.com/auth/drive", // finds, opens and shares the team's workspace file (broad: the app only ever touches that one file)
   "https://www.googleapis.com/auth/gmail.send", // send the emails you approve
   "https://www.googleapis.com/auth/gmail.readonly", // spot replies (the app never changes your mail)
 ];

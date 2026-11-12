@@ -1,22 +1,24 @@
 # Google setup (one time)
 
-Corpo Mailer signs you in with Google and uses three Google services as **you**: Drive (to keep the
-team's shared workspace file), Gmail (to send, and to read replies) and Google's file picker (so a
-teammate can open the shared file). One person does this setup for the whole team, in about 15
-minutes. No password or secret is stored anywhere: the values below are public identifiers.
+Corpo Mailer signs you in with Google and uses two Google services as **you**: Drive (to keep the
+team's shared workspace file) and Gmail (to send, and to read replies). One person does this setup
+for the whole team, in about 10 minutes. No password or secret is stored anywhere: the one value
+below, the client ID, is a public identifier.
 
-## 1. Create the project and turn on three APIs
+## 1. Create the project and turn on two APIs
 
 1. Open <https://console.cloud.google.com> and **create a project** ("Corpo Mailer").
-2. **APIs & Services → Library**: enable **Google Drive API**, **Gmail API** and **Google Picker API**.
+2. **APIs & Services → Library**: enable **Google Drive API** and **Gmail API**.
 
 ## 2. Consent screen
 
 **APIs & Services → OAuth consent screen** (newer consoles: *Google Auth platform*). Fill in the app
 name and a support email, then choose:
 
-* **Internal**: if everyone uses Google Workspace accounts from one organisation (a university or
-  company address). No warning screens, no verification, no expiry.
+* **Internal**: if everyone uses Google Workspace accounts from one organisation (for example
+  `@dtu.ac.in`) and the project was created inside that organisation. No test-user list, no warning
+  screens, no verification, no expiry: anyone with an address in the organisation can sign in. This
+  is the smoothest option if your whole team has organisation addresses.
 * **External**: for ordinary `@gmail.com` accounts. Leave it in **Testing** and add **every person
   who will sign in** under **Test users** (up to 100; add more any time). Google shows an
   "unverified app" warning (press *Advanced → Continue*); in Testing mode sign-ins last 7 days
@@ -27,7 +29,7 @@ Add these **scopes** (Data access / Scopes) if the console asks. The app request
 | Scope | Why |
 | --- | --- |
 | `openid`, `email` | Know which account is signed in |
-| `…/auth/drive.file` | Only the shared workspace file: the one the app creates, or the one you choose in the picker. Nothing else in your Drive |
+| `…/auth/drive` | Find, open and update the team's one shared workspace file, and add teammates to it. Google words this as access to your Drive; the app only ever touches that file. (A narrower permission exists, but then every teammate would have to pick the file by hand on every device.) |
 | `…/auth/gmail.send` | Send an email you approved |
 | `…/auth/gmail.readonly` | Notice replies to emails you sent |
 
@@ -43,31 +45,12 @@ http://localhost:3000
 
 There is no redirect URI and no client secret. Copy the **Client ID** (`…apps.googleusercontent.com`).
 
-## 4. Create the file-picker key
-
-Teammates open the shared file through Google's file picker, which needs an API key and your
-project's number.
-
-1. **Credentials → Create credentials → API key.** Open it and set:
-   * *Application restrictions*: **Websites**, then add `https://<your-github-username>.github.io/*`
-     and `http://localhost:3000/*`.
-   * *API restrictions*: **Restrict key → Google Picker API**.
-2. Copy the key (`AIza…`). Find the **Project number** (digits only) on the Cloud console's
-   dashboard, or under *IAM & Admin → Settings*.
-
-## 5. Give the site these values
+## 4. Give the site the client ID
 
 In the GitHub repo: **Settings → Secrets and variables → Actions → Variables → New repository
-variable**, three of them, then re-run the Pages workflow:
-
-| Variable | Value |
-| --- | --- |
-| `GOOGLE_CLIENT_ID` | the client ID from step 3 |
-| `GOOGLE_API_KEY` | the key from step 4 |
-| `GOOGLE_APP_ID` | the project number from step 4 |
-
-(They are not secrets, so repository *variables* are right. If you skip them, the login and join
-screens let each person paste the values; they're remembered in that browser.)
+variable** named `GOOGLE_CLIENT_ID` with the client ID from step 3, then re-run the Pages workflow.
+(It isn't a secret, so a repository *variable* is right. If you skip it, the login screen lets each
+person paste it; it's remembered in that browser.)
 
 ## How the team uses it
 
@@ -75,11 +58,15 @@ screens let each person paste the values; they're remembered in that browser.)
    *Corpo Mailer shared data* in their Drive.
 2. In **Settings → Team workspace** they add each teammate's Google email. Google emails the
    teammate a link to the file.
-3. **Each teammate** signs in, then presses **Choose the shared file** and picks it, **once**. After
-   that, on any new browser or device they just sign in: the app finds the file by itself (Google
-   remembers which file the account has opened with this app), so there is no setup to repeat.
+3. **Each teammate** just opens the site and signs in with that email. They land on the same
+   dashboard by themselves, on any browser or device, with nothing to choose or set up. If they
+   signed in a moment before being added, the page keeps checking and takes them in as soon as they
+   are.
 4. Everyone's changes merge into the same file. Changes from teammates appear within about 30 seconds,
    or press *Check for teammates' changes*.
+
+If the consent screen is **External**, a teammate must also be listed under **Test users** (step 2)
+before Google lets them sign in at all.
 
 ## What to expect
 
