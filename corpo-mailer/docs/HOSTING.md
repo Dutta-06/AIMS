@@ -11,8 +11,9 @@ running on your own computer**, and the website talks to it.
  http://localhost:8000              (your computer: data, Gmail, AI, and the sign-in check)
 ```
 
-**Where the backend runs:** on your own computer (this page), or in a **GitHub Codespace** with no
-install at all: see [`CODESPACES.md`](CODESPACES.md). Either way the website is told where the backend
+**Where the backend runs:** on your own computer (this page), on an **always-on server** you SSH into
+(see [`DEPLOY.md`](DEPLOY.md); best for continuous reply tracking), or in a **GitHub Codespace** with no
+install at all (see [`CODESPACES.md`](CODESPACES.md)). Either way the website is told where the backend
 is on its sign-in page (**Backend address**), so you never rebuild it when that changes.
 
 ## Is it safe that the website is public?

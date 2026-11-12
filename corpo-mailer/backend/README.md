@@ -262,3 +262,10 @@ backend in a Codespace, take secrets (`ALLOWED_EMAILS`, `OPENROUTER_API_KEY`, ..
 secrets, work out the Codespace's address for the Google redirect and CORS, and refuse to start
 without `ALLOWED_EMAILS`. With sign-in on, the API docs pages (`/docs`, `/redoc`, `/openapi.json`) are
 disabled. See [`../docs/CODESPACES.md`](../docs/CODESPACES.md).
+
+## Running on an always-on server
+
+`backend/Dockerfile` and `entrypoint.sh`, with `../deploy/docker-compose.yml` (backend + PostgreSQL +
+Caddy for automatic https), run it on a VPS you SSH into. The entrypoint refuses to start without
+`ALLOWED_EMAILS` and the Google client settings, applies database migrations, then starts the server
+behind Caddy. See [`../docs/DEPLOY.md`](../docs/DEPLOY.md).
