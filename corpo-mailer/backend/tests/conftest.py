@@ -43,12 +43,13 @@ class FakeLLM(LLM):
         self.calls: list[dict] = []
         self.reply = '{"subject": "Partner with brAInwave 3", "body": "Hi Raj, ..."}'
         self.fail = False
+        self.queue: list[str] = []  # replies handed out first, one per call
 
     def complete(self, *, system, user):
         self.calls.append({"system": system, "user": user})
         if self.fail:
             raise LLMError("all models failed")
-        return self.reply
+        return self.queue.pop(0) if self.queue else self.reply
 
 
 class FakeFetcher:

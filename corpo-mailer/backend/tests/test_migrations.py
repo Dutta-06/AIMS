@@ -329,3 +329,20 @@ def test_dropping_owners_keeps_every_contact_and_the_schema_matches_the_models(m
     command.check(cfg())
     command.downgrade(cfg(), TRACKER)  # and back: the column returns, empty
     assert "owner" in {c["name"] for c in inspect(engine).get_columns("contacts")}
+
+
+def test_existing_drafts_become_email_drafts_with_no_history(migrated_url):
+    command.upgrade(cfg(), PRE_TRACKER)
+    engine = create_engine(migrated_url)
+    _seed_old_schema(engine)
+    command.upgrade(cfg(), "head")
+    with engine.connect() as conn:
+        channel, history = conn.execute(
+            text("SELECT channel, history FROM drafts WHERE id = 1")
+        ).one()
+    assert (
+        channel == "email" and json.loads(history) == []
+        if isinstance(history, str)
+        else history == []
+    )
+    command.check(cfg())

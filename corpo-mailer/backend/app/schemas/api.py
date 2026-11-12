@@ -146,8 +146,21 @@ class InteractionOut(ORM):
 
 
 # ---- drafts
+def _draft_channel(v: Channel) -> Channel:
+    if v not in (Channel.EMAIL, Channel.LINKEDIN):
+        raise ValueError("Drafts can be written for email or LinkedIn")
+    return v
+
+
 class DraftIn(BaseModel):
     contact_id: int
+    channel: Channel = Channel.EMAIL
+
+    @field_validator("channel")
+    @classmethod
+    def _channel_ok(cls, v: Channel) -> Channel:
+        return _draft_channel(v)
+
     subject: str = Field(min_length=1, max_length=500)
     body: str = Field(min_length=1)
 
@@ -157,9 +170,18 @@ class DraftUpdate(BaseModel):
     body: str | None = Field(default=None, min_length=1)
 
 
+class RevisionOut(BaseModel):
+    subject: str
+    body: str
+    feedback: str
+    at: str
+
+
 class DraftOut(ORM):
     id: int
     contact_id: int
+    channel: Channel
+    history: list[RevisionOut]
     subject: str
     body: str
     status: DraftStatus
@@ -171,8 +193,19 @@ class DraftOut(ORM):
     created_at: datetime
 
 
+class ReviseIn(BaseModel):
+    feedback: str = Field(min_length=2, max_length=1000, description="What to change")
+
+
 class GenerateIn(BaseModel):
     contact_id: int
+    channel: Channel = Channel.EMAIL
+
+    @field_validator("channel")
+    @classmethod
+    def _channel_ok(cls, v: Channel) -> Channel:
+        return _draft_channel(v)
+
     kind: DraftKind = DraftKind.INTRO
     instructions: str | None = Field(default=None, max_length=1000)
 

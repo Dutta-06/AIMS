@@ -1,7 +1,7 @@
 from datetime import datetime
 from urllib.parse import quote
 
-from sqlalchemy import JSON, ForeignKey, String, Text, false
+from sqlalchemy import JSON, ForeignKey, String, Text, false, text
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -112,6 +112,13 @@ class Draft(Base):
     subject: Mapped[str] = mapped_column(String(500))
     body: Mapped[str] = mapped_column(Text)
     status: Mapped[DraftStatus] = mapped_column(_enum(DraftStatus), default=DraftStatus.DRAFT)
+    # "email" (sent from here, after approval) or "linkedin" (a note the team pastes into
+    # LinkedIn by hand; this app never sends it).
+    channel: Mapped[Channel] = mapped_column(
+        _enum(Channel), default=Channel.EMAIL, server_default=Channel.EMAIL.value
+    )
+    # Earlier versions replaced by an AI revision: [{"subject","body","feedback","at"}].
+    history: Mapped[list[dict]] = mapped_column(JSON, default=list, server_default=text("'[]'"))
     generated_by_ai: Mapped[bool] = mapped_column(default=False)
     # Fingerprint of recipient+subject+body at approval time. Any later edit voids approval.
     approved_hash: Mapped[str | None] = mapped_column(String(64))

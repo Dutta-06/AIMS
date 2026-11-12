@@ -6,7 +6,7 @@ from app.api.deps import get_or_404
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.models import Contact, Draft
-from app.models.enums import DraftStatus
+from app.models.enums import Channel, DraftStatus
 from app.providers.llm import LLM, get_llm
 from app.providers.mail import Mailer, get_mailer
 from app.schemas import api as s
@@ -43,10 +43,12 @@ def generate(
     contact = get_or_404(db, Contact, body.contact_id)
     if contact.do_not_contact:
         raise HTTPException(409, "This contact is marked do-not-contact")
-    if not contact.email:
+    if body.channel == Channel.EMAIL and not contact.email:
         raise HTTPException(409, "This contact has no email address yet; add one first")
     try:
-        return drafting.generate_draft(db, llm, settings, contact, body.kind, body.instructions)
+        return drafting.generate_draft(
+            db, llm, settings, contact, body.kind, body.instructions, body.channel
+        )
     except drafting.GenerationError as exc:
         raise HTTPException(502, str(exc)) from None
 
@@ -74,6 +76,35 @@ def get_draft(draft_id: int, db: Session = Depends(get_db)):
 def edit_draft(draft_id: int, body: s.DraftUpdate, db: Session = Depends(get_db)):
     draft = get_or_404(db, Draft, draft_id)
     return _guard(svc.edit_draft, db, draft, body.subject, body.body)
+
+
+@router.post("/{draft_id}/revise", response_model=s.DraftOut)
+def revise(
+    draft_id: int,
+    body: s.ReviseIn,
+    db: Session = Depends(get_db),
+    llm: LLM = Depends(get_llm),
+    settings: Settings = Depends(get_settings),
+):
+    """Rewrite a draft following the team's feedback. Voids any approval; the old text is kept."""
+    draft = get_or_404(db, Draft, draft_id)
+    if draft.status in (DraftStatus.SENDING, DraftStatus.SENT):
+        raise HTTPException(409, f"A {draft.status.value} draft cannot be changed")
+    try:
+        return drafting.revise_draft(db, llm, settings, draft, body.feedback)
+    except drafting.GenerationError as exc:
+        raise HTTPException(502, str(exc)) from None
+
+
+@router.post("/{draft_id}/undo", response_model=s.DraftOut)
+def undo(draft_id: int, db: Session = Depends(get_db)):
+    return _guard(svc.undo_revision, db, get_or_404(db, Draft, draft_id))
+
+
+@router.post("/{draft_id}/mark-sent", response_model=s.DraftOut)
+def mark_sent(draft_id: int, db: Session = Depends(get_db)):
+    """Record that a LinkedIn note was pasted into LinkedIn by hand. Sends nothing."""
+    return _guard(svc.mark_note_sent, db, get_or_404(db, Draft, draft_id))
 
 
 @router.post("/{draft_id}/approve", response_model=s.DraftOut)
