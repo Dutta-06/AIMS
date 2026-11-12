@@ -144,12 +144,17 @@ export class App {
     this.write(LOCAL_KEYS.appId, appId.trim());
     this.patch({ picker_ready: !!(this.apiKey() && this.appId()) });
   }
+  /** The keys saved in this browser only. */
   openrouterKey(): string {
     return this.read(LOCAL_KEYS.openrouterKey);
   }
-  /** How many OpenRouter keys are saved in this browser. */
+  /** Every key in use: this browser's own plus the ones the team shares through the workspace file. */
+  allOpenrouterKeys(): string {
+    return parseKeys(`${this.openrouterKey()}\n${this.core?.db.settings.team_ai_keys ?? ""}`).join("\n");
+  }
+  /** How many OpenRouter keys are in use (own + team). */
   openrouterKeyCount(): number {
-    return parseKeys(this.openrouterKey()).length;
+    return parseKeys(this.allOpenrouterKeys()).length;
   }
   setOpenrouterKey(v: string) {
     this.write(LOCAL_KEYS.openrouterKey, parseKeys(v).join("\n"));
@@ -277,7 +282,21 @@ export class App {
   private async openData(email: string): Promise<void> {
     this.patch({ phase: "loading", email, error: null });
     this.drive = this.o.drive ? this.o.drive(this.auth) : new DriveStore(this.auth, this.o.fetchImpl);
-    const w = this.readWorkspace(email);
+    let w = this.readWorkspace(email);
+    if (!w) {
+      // A new browser or device: if this account has opened the team's file before, find it again.
+      try {
+        const found = await this.guarded(() => this.drive!.find(WORKSPACE_FILE_NAME));
+        if (found) {
+          w = { id: found.id, name: found.name ?? WORKSPACE_FILE_NAME };
+          this.saveWorkspace(email, w);
+        }
+      } catch (e) {
+        // Not knowing is not the same as "there is none": don't offer to start a second workspace.
+        this.patch({ phase: "error", error: e instanceof Error ? e.message : "Couldn't look for your team's workspace" });
+        throw e;
+      }
+    }
     if (!w) {
       this.patch({ phase: "needs_workspace", workspace: null });
       return;
@@ -336,7 +355,7 @@ export class App {
     persistence.bind(() => core.db);
     const fromName = () => core.db.settings.from_name;
     this.mail = this.o.mailer ? this.o.mailer(this.auth, fromName) : new GmailApi(this.auth, fromName, this.o.fetchImpl);
-    const llm = this.o.llm ?? new OpenRouterLLM({ apiKey: () => this.openrouterKey(), models: () => this.models(), fetchImpl: this.o.fetchImpl });
+    const llm = this.o.llm ?? new OpenRouterLLM({ apiKey: () => this.allOpenrouterKeys(), models: () => this.models(), fetchImpl: this.o.fetchImpl });
     this.core = core;
     this.persistence = persistence;
     this.drafts = new Drafts(core, {
@@ -368,6 +387,14 @@ export class App {
     const email = this.state.email;
     if (!email || !this.drive) throw new ApiError(401, "Sign in with Google to continue");
     this.patch({ error: null });
+    // Never end up with two workspaces: if one already exists for this account, use it.
+    const existing = await this.guarded(() => this.drive!.find(WORKSPACE_FILE_NAME));
+    if (existing) {
+      const w = { id: existing.id, name: existing.name ?? WORKSPACE_FILE_NAME };
+      this.saveWorkspace(email, w);
+      await this.openWorkspace(email, w);
+      return;
+    }
     const file = await this.guarded(() => this.drive!.create(WORKSPACE_FILE_NAME, JSON.stringify(emptyDb())));
     const w = { id: file.id, name: file.name ?? WORKSPACE_FILE_NAME };
     this.saveWorkspace(email, w);
@@ -458,7 +485,7 @@ export class App {
 
   /** Ask the AI a trivial question, to check the key and models work. */
   async testAi(): Promise<string> {
-    const llm = this.o.llm ?? new OpenRouterLLM({ apiKey: () => this.openrouterKey(), models: () => this.models(), fetchImpl: this.o.fetchImpl });
+    const llm = this.o.llm ?? new OpenRouterLLM({ apiKey: () => this.allOpenrouterKeys(), models: () => this.models(), fetchImpl: this.o.fetchImpl });
     try {
       return (await llm.complete({ system: "Reply with exactly the word OK.", user: "ping" })).trim().slice(0, 40);
     } catch (e) {

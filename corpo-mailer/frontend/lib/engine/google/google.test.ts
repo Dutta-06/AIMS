@@ -254,6 +254,25 @@ describe("Google Drive storage", () => {
     expect(url).not.toContain("q=");
   });
 
+  it("finds the team's file by name among the files this app may open, newest first", async () => {
+    on(/drive\/v3\/files\?q=/, () => json({ files: [{ id: "new", name: "Corpo Mailer shared data", modifiedTime: "t2", version: "9" }, { id: "old", name: "Corpo Mailer shared data", modifiedTime: "t1", version: "3" }] }));
+    expect((await drive().find("Corpo Mailer shared data"))?.id).toBe("new");
+    const url = decodeURIComponent(calls[0].url);
+    expect(url).toContain("name='Corpo Mailer shared data' and trashed=false");
+    expect(url).toContain("orderBy=modifiedTime desc");
+  });
+
+  it("says there is none when this account has never opened one", async () => {
+    on(/drive\/v3\/files\?q=/, () => json({ files: [] }));
+    expect(await drive().find("x")).toBeNull();
+  });
+
+  it("escapes a quote in the name so the search can't be altered", async () => {
+    on(/drive\/v3\/files\?q=/, () => json({ files: [] }));
+    await drive().find("it's");
+    expect(decodeURIComponent(calls[0].url)).toContain("name='it\\'s'");
+  });
+
   it("reads the file's text", async () => {
     on(/files\/f1\?alt=media/, () => new Response('{"a":1}'));
     expect(await drive().read("f1")).toBe('{"a":1}');

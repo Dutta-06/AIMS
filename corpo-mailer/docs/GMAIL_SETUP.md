@@ -75,8 +75,9 @@ screens let each person paste the values; they're remembered in that browser.)
    *Corpo Mailer shared data* in their Drive.
 2. In **Settings → Team workspace** they add each teammate's Google email. Google emails the
    teammate a link to the file.
-3. **Each teammate** signs in, then presses **Choose the shared file** and picks it. From then on
-   they open straight into the same dashboard.
+3. **Each teammate** signs in, then presses **Choose the shared file** and picks it, **once**. After
+   that, on any new browser or device they just sign in: the app finds the file by itself (Google
+   remembers which file the account has opened with this app), so there is no setup to repeat.
 4. Everyone's changes merge into the same file. Changes from teammates appear within about 30 seconds,
    or press *Check for teammates' changes*.
 
@@ -90,9 +91,12 @@ screens let each person paste the values; they're remembered in that browser.)
   a second.)
 * **Replies** are noticed in the browser of the person who sent the email, every 5 minutes while that
   page is open, and show up on the shared dashboard for everyone. A closed tab checks nothing.
-* **AI keys** stay in each person's own browser (Settings). Teammates can each paste their own
-  OpenRouter key, or one person can paste several people's keys, one per line; requests take turns
-  across them. Keys from the *same* OpenRouter account share one free allowance and gain nothing.
+* **AI keys:** in **Settings → Team keys**, one person pastes everyone's OpenRouter keys, one per
+  line. They are saved in the shared file, so every teammate and every new device has them without
+  any setup. Requests take turns across the keys, and a rate-limited key hands over to the next.
+  **Anyone who can open the shared file can read those keys**, so only share the file with people you
+  trust with them. A person can also keep a key just for their own browser (the first box). Keys from
+  the *same* OpenRouter account share one free allowance and gain nothing.
 * The sign-in lasts about an hour; the app renews it quietly, and if Google needs you, a banner says
   **Continue** and nothing is lost.
 * **Sign out** revokes the access and clears the data from that browser. The shared file stays in Drive.

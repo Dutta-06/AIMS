@@ -50,6 +50,8 @@ export type EventSettings = {
   team_brief: string;
   /** Optional pasted messages the team likes (older emails, say). Style reference only. */
   style_examples: string;
+  /** OpenRouter keys the team shares, one per line. Anyone with the workspace file can read them. */
+  team_ai_keys: string;
   from_name: string;
   stale_after_days: number;
 };
@@ -86,6 +88,7 @@ export const DEFAULT_SETTINGS: EventSettings = {
   team_brief:
     "You are helping the brAInwave 3 student organising team at DTU find sponsors. The aim of each message is a short reply or a quick call, not an instant commitment. Sound warm, respectful and specific to the company; never pushy. Do not promise anything that is not in the event details.",
   style_examples: "",
+  team_ai_keys: "",
   from_name: "brAInwave Team",
   stale_after_days: 7,
 };

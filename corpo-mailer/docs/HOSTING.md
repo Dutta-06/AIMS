@@ -15,16 +15,16 @@ The app is plain static files, so GitHub Pages is the whole deployment: no serve
 ## Is it safe that the site is public?
 
 The site holds no data and no secrets: anyone can open it, but they only see a sign-in button. Your
-leads sit in one Drive file shared only with the people you add, and are readable only after signing in as one of them. The OpenRouter key
-stays in the browser's local storage on your computer and is sent only to OpenRouter. Anything that
-runs in the browser can be inspected, so use a free-tier key you can rotate.
+leads sit in one Drive file shared only with the people you add, and are readable only after signing in as one of them. The team's OpenRouter
+keys are saved in that same shared file (readable by the people it's shared with) and are sent only to
+OpenRouter. Use free-tier keys you can rotate.
 
 ## Honest limits of a no-server design
 
 * Replies are only noticed while the sender's tab is open.
 * Two people editing the same lead at the same second: the later edit wins (everything else merges).
 * No website checking or sponsor discovery (paused on purpose).
-* The AI key lives in the browser; clearing site data removes it.
+* The team's AI keys are readable by anyone with access to the shared file.
 * Free-model quality and availability vary; the app rotates through several and says when all fail.
 
 ## Local development

@@ -22,6 +22,8 @@ export interface DriveFile {
 export type Collaborator = { email: string; name: string | null; role: string };
 
 export interface DriveLike {
+  /** The workspace file this account has already been given access to (created, or picked once on any device), newest first. */
+  find(name: string): Promise<DriveFile | null>;
   meta(id: string): Promise<DriveFile>;
   read(id: string): Promise<string>;
   create(name: string, json: string): Promise<DriveFile>;
@@ -38,6 +40,13 @@ export class DriveStore implements DriveLike {
     private auth: GoogleAuth,
     private fetchImpl: Fetcher = (...a) => fetch(...a),
   ) {}
+
+  async find(name: string): Promise<DriveFile | null> {
+    const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and trashed=false`);
+    const res = await google(this.auth, `${API}?q=${q}&orderBy=modifiedTime%20desc&pageSize=10&fields=files(${FIELDS})`, {}, this.fetchImpl);
+    const body = (await res.json()) as { files?: DriveFile[] };
+    return body.files?.[0] ?? null;
+  }
 
   async meta(id: string): Promise<DriveFile> {
     const res = await google(this.auth, `${API}/${encodeURIComponent(id)}?fields=${FIELDS}`, {}, this.fetchImpl);

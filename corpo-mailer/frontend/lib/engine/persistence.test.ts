@@ -21,6 +21,9 @@ class FakeDrive implements DriveLike {
   private meta0(): DriveFile {
     return { id: "f1", name: "Shared", modifiedTime: `t${this.s.version}`, version: String(this.s.version) };
   }
+  async find() {
+    return this.meta0();
+  }
   async meta() {
     return this.meta0();
   }

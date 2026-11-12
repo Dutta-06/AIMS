@@ -47,7 +47,7 @@ lib/api.ts         thin facade the pages call
   than repeated.
 * **Replies** are matched by Message-ID / Gmail thread (sender address as fallback); auto-replies and
   your own mail are ignored; bounces mark the lead do-not-contact.
-* Browser settings (`corpo.googleClientId`, `corpo.googleApiKey`, `corpo.googleAppId`, `corpo.openrouterKey` (one or several keys, one per line), `corpo.models`, `corpo.workspace.<email>`) live in local storage.
+* Browser settings (`corpo.googleClientId`, `corpo.googleApiKey`, `corpo.googleAppId`, `corpo.openrouterKey` (this browser's own keys, one per line; the team's keys live in the shared file's settings), `corpo.models`, `corpo.workspace.<email>`) live in local storage.
 
 ## What the AI is told
 
