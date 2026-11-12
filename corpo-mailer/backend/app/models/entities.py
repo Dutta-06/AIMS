@@ -140,6 +140,7 @@ class Prospect(Base):
     domain: Mapped[str | None] = mapped_column(String(200), index=True)
     industry: Mapped[str | None] = mapped_column(String(100))
     why: Mapped[str | None] = mapped_column(Text)  # the model's reason: untrusted text
+    source: Mapped[str | None] = mapped_column(String(300))  # e.g. the sponsor page it came from
     state: Mapped[ProspectState] = mapped_column(_enum(ProspectState), default=ProspectState.NEW)
     verdict: Mapped[Verdict] = mapped_column(_enum(Verdict), default=Verdict.UNVERIFIED)
     verdict_note: Mapped[str | None] = mapped_column(Text)  # plain-language reason for the verdict

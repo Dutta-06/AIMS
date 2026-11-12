@@ -227,3 +227,12 @@ def test_public_sites_are_accepted_and_normalised(monkeypatch):
     fake_dns(monkeypatch, {"www.acme.test": ["93.184.216.34"]})
     assert validate_public_url("WWW.Acme.test/About?x=1#frag") == "https://www.acme.test/About?x=1"
     assert validate_public_url("http://www.acme.test:80") == "http://www.acme.test:80/"
+
+
+def test_a_logo_inside_a_link_gives_the_link_a_name():
+    _, _, links, _ = parse_html(
+        '<a href="/x"><img src="a.png" alt="Acme Robotics"></a><a href="/y"><img src="b.png"></a>'
+        '<img alt="loose logo">',
+        "https://a.test/",
+    )
+    assert links == [("https://a.test/x", "Acme Robotics"), ("https://a.test/y", "")]

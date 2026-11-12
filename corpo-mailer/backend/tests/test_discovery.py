@@ -393,3 +393,126 @@ def test_each_prospect_links_to_a_linkedin_people_search_without_scraping(client
 def test_unknown_state_and_missing_ids(client):
     assert client.get(f"{API}", params={"state": "bogus"}).status_code == 422
     assert client.post(f"{API}/999/verify").status_code == 404
+
+
+# ------------------------------------------------------------------ sponsor pages
+SPONSORS = "https://hack.test/sponsors"
+
+
+def sponsor_page(fetcher, links, url=SPONSORS, **kw):
+    fetcher.pages[url] = page(url, "Our sponsors", title="Sponsors", links=links, **kw)
+
+
+def from_page(client, url=SPONSORS):
+    return client.post(f"{API}/from-page", json={"url": url})
+
+
+def test_sponsor_page_links_become_unverified_candidates_with_their_source(client, fetcher, llm):
+    sponsor_page(
+        fetcher,
+        [
+            ("https://www.acme.test/?ref=hack", "Acme Robotics logo"),
+            ("https://globex.co.in/about", "Globex"),
+            (
+                "https://initech-labs.test/",
+                "Visit website",
+            ),  # no real name: guessed from the domain
+        ],
+    )
+    r = from_page(client).json()
+    got = {p["name"]: p for p in r["added"]}
+    assert set(got) == {"Acme Robotics", "Globex", "Initech Labs"} and r["found"] == 3
+    acme = got["Acme Robotics"]
+    assert (acme["website"], acme["domain"], acme["verdict"], acme["state"]) == (
+        "https://acme.test/",
+        "acme.test",
+        "unverified",
+        "new",
+    )
+    assert acme["source"] == "Sponsor page: hack.test/sponsors" and acme["why"] is None
+    assert got["Globex"]["domain"] == "globex.co.in"
+    assert llm.calls == []  # no model read the page
+
+
+def test_own_site_social_and_platform_links_are_not_sponsors(client, fetcher):
+    sponsor_page(
+        fetcher,
+        [
+            ("https://hack.test/about", "About"),
+            ("https://blog.hack.test/", "Blog"),
+            ("https://twitter.com/hack", "Twitter"),
+            ("https://www.linkedin.com/company/hack", "LinkedIn"),
+            ("https://github.com/hack", "GitHub"),
+            ("https://devfolio.co/hack", "Apply"),
+            ("mailto:team@hack.test", "Mail"),
+            ("https://10.1.2.3/x", "IP"),
+            ("https://real.test/", "Real Co"),
+        ],
+    )
+    assert [p["name"] for p in from_page(client).json()["added"]] == ["Real Co"]
+
+
+def test_the_same_company_listed_twice_is_one_candidate_and_real_names_win(client, fetcher):
+    sponsor_page(
+        fetcher,
+        [
+            ("https://acme.test/", ""),
+            ("https://acme.test/careers", "Acme Robotics"),
+            ("https://shop.acme.test/", "Shop"),
+        ],
+    )
+    r = from_page(client).json()
+    assert [p["name"] for p in r["added"]] == ["Acme Robotics"] and r["found"] == 1
+
+
+def test_companies_already_known_are_skipped(client, fetcher, lead, llm):
+    add(client, llm, "Globex", "globex.test")
+    sponsor_page(
+        fetcher,
+        [
+            ("https://acme.test/", "Acme"),
+            ("https://other.test/", "Globex"),
+            ("https://globex.test/", "Globex Corp"),
+            ("https://new.test/", "New Co"),
+        ],
+    )
+    r = from_page(client).json()
+    assert [p["name"] for p in r["added"]] == ["New Co"] and r["skipped_duplicates"] == 3
+
+
+def test_running_it_twice_adds_nothing_the_second_time(client, fetcher):
+    sponsor_page(fetcher, [("https://one.test/", "One"), ("https://two.test/", "Two")])
+    assert len(from_page(client).json()["added"]) == 2
+    again = from_page(client).json()
+    assert again["added"] == [] and again["skipped_duplicates"] == 2
+
+
+def test_candidates_are_capped_and_names_bounded(client, fetcher):
+    sponsor_page(
+        fetcher,
+        [(f"https://firm{i}.test/", f"Firm {i}") for i in range(100)]
+        + [("https://long.test/", "x" * 300)],
+    )
+    r = from_page(client).json()
+    assert len(r["added"]) == 60 and r["found"] == 60
+
+
+def test_unreachable_or_broken_pages_are_clear_errors(client, fetcher):
+    fetcher.pages[SPONSORS] = FetchError("Couldn't find hack.test")
+    r = from_page(client)
+    assert r.status_code == 409 and "Couldn't find hack.test" in r.json()["detail"]
+    fetcher.pages[SPONSORS] = page(SPONSORS, "Forbidden", status=403)
+    assert from_page(client).status_code == 409
+    assert client.get(f"{API}", params={"state": "all"}).json() == []
+
+
+def test_a_page_with_no_outside_links_finds_nothing(client, fetcher):
+    sponsor_page(fetcher, [("https://hack.test/a", "A")])
+    assert from_page(client).json() == {"added": [], "skipped_duplicates": 0, "found": 0}
+
+
+def test_extracted_candidates_then_go_through_the_same_verification(client, fetcher):
+    sponsor_page(fetcher, [("https://acme.test/", "Acme Robotics")])
+    p = from_page(client).json()["added"][0]
+    good_site(fetcher)
+    assert client.post(f"{API}/{p['id']}/verify").json()["verdict"] == "verified"

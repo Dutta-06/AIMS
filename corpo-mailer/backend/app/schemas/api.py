@@ -226,6 +226,7 @@ class ProspectOut(ORM):
     domain: str | None
     industry: str | None
     why: str | None
+    source: str | None
     state: ProspectState
     verdict: Verdict
     verdict_note: str | None
@@ -248,6 +249,14 @@ class SuggestIn(BaseModel):
 class SuggestOut(BaseModel):
     added: list[ProspectOut]
     skipped_duplicates: int
+
+
+class FromPageIn(BaseModel):
+    url: str = Field(min_length=4, max_length=500, description="A page that lists sponsors")
+
+
+class FromPageOut(SuggestOut):
+    found: int
 
 
 class VerifyIn(BaseModel):

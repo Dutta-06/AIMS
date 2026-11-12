@@ -176,4 +176,11 @@ records what is really there; nothing the model says is believed until that happ
   inboxes (or a "General contact" lead). The model's reasoning is never copied into notes.
   **Reject** is remembered so it isn't suggested again; **Snooze** hides it for N days.
 
+**From a sponsor page** (`POST /discovery/from-page {"url": ...}`): give it a page that lists
+sponsors (say, another hackathon's). It takes the links to *other* websites, naming each from the
+link text or logo alt text (falling back to the domain), and skips the page's own site, social
+networks, code hosts and event platforms, plus anything already tracked or suggested. This is plain
+code, not a model. The names are guesses, so each candidate still goes through the live-web
+verification above. At most 60 are taken per page.
+
 Nothing in discovery can send a message.

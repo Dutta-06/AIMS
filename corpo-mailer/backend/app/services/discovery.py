@@ -97,6 +97,18 @@ def parse_suggestions(text: str) -> list[dict]:
     return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
 
 
+def _known(db: Session) -> tuple[set[str], set[str], list[Prospect]]:
+    """Names and domains we already have (companies and every prospect), to avoid repeats."""
+    prospects = list(db.scalars(select(Prospect)))
+    companies = list(db.scalars(select(Company)))
+    names = {norm_name(c.name) for c in companies} | {norm_name(p.name) for p in prospects}
+    domains = {p.domain for p in prospects if p.domain}
+    for c in companies:
+        if (d := clean_website(c.website)[1]) is not None:
+            domains.add(d)
+    return names, domains, prospects
+
+
 def suggest(
     db: Session, llm: LLM, settings: Settings, count: int = 8, focus: str | None = None
 ) -> dict:
@@ -126,12 +138,7 @@ def suggest(
     except LLMError as exc:
         raise DiscoveryError(str(exc)) from exc
 
-    names = {norm_name(c.name) for c in db.scalars(select(Company))}
-    names |= {norm_name(p.name) for p in known}
-    domains = {p.domain for p in known if p.domain}
-    domains |= {
-        d for c in db.scalars(select(Company)) if (d := clean_website(c.website)[1]) is not None
-    }
+    names, domains, _ = _known(db)
     added: list[Prospect] = []
     skipped = 0
     for item in parse_suggestions(reply)[: count * 2]:
@@ -160,6 +167,92 @@ def suggest(
             break
     db.commit()
     return {"added": added, "skipped_duplicates": skipped}
+
+
+# ------------------------------------------------------------------ sponsor pages
+# Links to these are never sponsors: social networks, code hosts, event platforms, big platforms.
+NOT_SPONSORS = {
+    "facebook.com", "twitter.com", "x.com", "instagram.com", "linkedin.com", "youtube.com",
+    "youtu.be", "github.com", "gitlab.com", "discord.com", "discord.gg", "t.me", "telegram.org",
+    "whatsapp.com", "medium.com", "reddit.com", "linktr.ee", "google.com", "goo.gl", "bit.ly",
+    "devfolio.co", "devpost.com", "unstop.com", "eventbrite.com", "meetup.com", "mlh.io",
+    "wikipedia.org", "apple.com", "cloudflare.com", "wordpress.com", "wixsite.com", "notion.site",
+    "notion.so", "canva.com", "figma.com", "forms.gle", "typeform.com", "w3.org", "schema.org",
+}  # fmt: skip
+GENERIC_ANCHORS = {
+    "sponsor", "sponsors", "partner", "partners", "learn more", "read more", "visit", "website",
+    "visit website", "click here", "here", "logo", "image", "link", "home", "more", "view",
+    "know more", "apply", "register",
+}  # fmt: skip
+MAX_FROM_PAGE = 60
+_SECOND_LEVEL = {"co", "com", "org", "net", "ac", "gov", "edu"}
+
+
+def base_domain(host: str) -> str:
+    """acme.co.in -> acme.co.in, careers.acme.com -> acme.com (good enough for grouping)."""
+    parts = host.lower().removeprefix("www.").split(".")
+    if len(parts) >= 3 and parts[-2] in _SECOND_LEVEL and len(parts[-1]) == 2:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:])
+
+
+def _name_for(anchor: str, domain: str) -> str:
+    text = re.sub(r"\s+", " ", re.sub(r"(?i)\b(logo|sponsor|partner)\b", " ", anchor)).strip(
+        " -|·:"
+    )
+    if 2 <= len(text) <= 40 and text.lower() not in GENERIC_ANCHORS and "http" not in text.lower():
+        return text
+    return domain.split(".")[0].replace("-", " ").title()
+
+
+def extract_sponsors(db: Session, fetcher: PageFetcher, url: str) -> dict:
+    """Candidates from a page that lists sponsors: its links to *other* websites.
+
+    This is plain code (no model reads the page). The names are guesses from link text or logo
+    alt text, so every candidate still has to pass verification and a human before it counts.
+    """
+    try:
+        page = fetcher.fetch(url)
+    except FetchError as exc:
+        raise DiscoveryError(f"Couldn't open that page: {exc}") from None
+    if page.status >= 400:
+        raise DiscoveryError(f"That page answered with an error ({page.status})")
+    own = base_domain(urlsplit(page.final_url).hostname or "")
+    seen: dict[str, tuple[str, str]] = {}
+    for link, anchor in page.links:
+        parts = urlsplit(link)
+        host = (parts.hostname or "").lower()
+        if parts.scheme not in ("http", "https") or "." not in host:
+            continue
+        domain = base_domain(host)
+        if domain == own or domain in NOT_SPONSORS or domain.replace(".", "").isdigit():
+            continue
+        name = _name_for(anchor, domain)
+        # Prefer a link whose text gave a real name over one we had to guess from the domain
+        if domain not in seen or (seen[domain][0].lower() == domain.split(".")[0] and name):
+            seen[domain] = (name, f"https://{host.removeprefix('www.')}/")
+        if len(seen) >= MAX_FROM_PAGE:
+            break
+
+    known_names, known_domains, _ = _known(db)
+    source = f"Sponsor page: {urlsplit(page.final_url).hostname}{urlsplit(page.final_url).path}"[
+        :300
+    ]
+    added: list[Prospect] = []
+    skipped = 0
+    for domain, (name, website) in seen.items():
+        if norm_name(name) in known_names or domain in known_domains:
+            skipped += 1
+            continue
+        known_names.add(norm_name(name))
+        known_domains.add(domain)
+        p = Prospect(
+            name=name[:200], website=website, domain=domain, source=source, evidence=[], emails=[]
+        )
+        db.add(p)
+        added.append(p)
+    db.commit()
+    return {"added": added, "skipped_duplicates": skipped, "found": len(seen)}
 
 
 # ------------------------------------------------------------------ verifying

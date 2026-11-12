@@ -136,6 +136,7 @@ export type Prospect = {
   domain: string | null;
   industry: string | null;
   why: string | null;
+  source: string | null;
   state: ProspectState;
   verdict: Verdict;
   verdict_note: string | null;

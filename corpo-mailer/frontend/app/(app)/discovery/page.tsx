@@ -151,6 +151,7 @@ function ProspectCard({ p, tab, onChanged, checking }: { p: Prospect; tab: Prosp
       </div>
 
       {p.verdict_note && <p className="pt-1 text-sm text-body">{p.verdict_note}</p>}
+      {p.source && <p className="text-xs text-faint">Found on: {p.source}. The name is a guess from the link; the check below confirms it.</p>}
       {p.why && (
         <p className="text-xs text-faint">
           The AI&apos;s reason (not checked): {p.why}
@@ -197,6 +198,8 @@ export default function DiscoveryPage() {
   const [asking, setAsking] = useState(false);
   const [count, setCount] = useState("8");
   const [focus, setFocus] = useState("");
+  const [mode, setMode] = useState<"ideas" | "page">("ideas");
+  const [pageUrl, setPageUrl] = useState("");
   const [progress, setProgress] = useState<{ done: number; total: number; name: string } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const { data, error, loading, reload } = useQuery(`discovery:${tab}`, () => api.discovery.list(tab));
@@ -205,10 +208,21 @@ export default function DiscoveryPage() {
     setErr(null);
     setAsking(false);
     try {
-      setProgress({ done: 0, total: 0, name: "Asking the model for ideas…" });
-      const { added, skipped_duplicates } = await api.discovery.suggest({ count: Number(count) || 8, focus: focus.trim() || undefined });
+      let added: Prospect[];
+      let skipped: number;
+      if (mode === "page") {
+        setProgress({ done: 0, total: 0, name: "Reading the sponsor page…" });
+        const r = await api.discovery.fromPage(pageUrl.trim());
+        added = r.added;
+        skipped = r.skipped_duplicates;
+      } else {
+        setProgress({ done: 0, total: 0, name: "Asking the model for ideas…" });
+        const r = await api.discovery.suggest({ count: Number(count) || 8, focus: focus.trim() || undefined });
+        added = r.added;
+        skipped = r.skipped_duplicates;
+      }
       if (added.length === 0) {
-        toast(skipped_duplicates ? "Nothing new: every idea was already in your list" : "The model had no new ideas");
+        toast(skipped ? "Nothing new: every company was already in your list" : mode === "page" ? "No companies found on that page" : "The model had no new ideas");
         return;
       }
       setTab("new");
@@ -255,17 +269,35 @@ export default function DiscoveryPage() {
               void findAndCheck();
             }}
           >
-            <div className="grid gap-3 sm:grid-cols-[8rem_1fr]">
-              <Field label="How many">
-                <Input type="number" min={1} max={20} value={count} onChange={(e) => setCount(e.target.value)} />
-              </Field>
-              <Field label="Focus (optional)">
-                <Input value={focus} onChange={(e) => setFocus(e.target.value)} placeholder="e.g. cloud and AI infrastructure companies" maxLength={300} />
-              </Field>
+            <div role="tablist" aria-label="Where to look" className="inline-flex rounded-full border border-glass-border bg-glass p-1">
+              {([["ideas", "AI ideas"], ["page", "From a sponsor page"]] as const).map(([v, label]) => (
+                <button key={v} type="button" role="tab" aria-selected={mode === v} onClick={() => setMode(v)} className={`h-8 rounded-full px-3.5 text-sm transition-colors ${mode === v ? "bg-glass-strong text-heading" : "text-body hover:text-heading"}`}>
+                  {label}
+                </button>
+              ))}
             </div>
-            <p className="text-xs text-body">New ideas are modelled on the companies already in your list. Each is then checked against its real website. Nothing is contacted.</p>
+            {mode === "ideas" ? (
+              <>
+                <div className="grid gap-3 sm:grid-cols-[8rem_1fr]">
+                  <Field label="How many">
+                    <Input type="number" min={1} max={20} value={count} onChange={(e) => setCount(e.target.value)} />
+                  </Field>
+                  <Field label="Focus (optional)">
+                    <Input value={focus} onChange={(e) => setFocus(e.target.value)} placeholder="e.g. cloud and AI infrastructure companies" maxLength={300} />
+                  </Field>
+                </div>
+                <p className="text-xs text-body">New ideas are modelled on the companies already in your list. Each is then checked against its real website. Nothing is contacted.</p>
+              </>
+            ) : (
+              <>
+                <Field label="Link to a page that lists sponsors">
+                  <Input value={pageUrl} onChange={(e) => setPageUrl(e.target.value)} placeholder="https://some-hackathon.example/sponsors" maxLength={500} />
+                </Field>
+                <p className="text-xs text-body">Try another hackathon&apos;s sponsors page. I take the companies it links to (not its own pages or social links), then check each against its real website. Nothing is contacted.</p>
+              </>
+            )}
             <div className="flex gap-2">
-              <Button type="submit" variant="primary">Find and check</Button>
+              <Button type="submit" variant="primary" disabled={mode === "page" && pageUrl.trim().length < 4}>Find and check</Button>
               <Button type="button" variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
             </div>
           </form>

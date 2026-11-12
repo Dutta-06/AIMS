@@ -116,6 +116,11 @@ export const api = {
     list: (state: ProspectState | "all" = "new") => request<Prospect[]>(`/discovery${qs({ state })}`),
     suggest: (b: { count: number; focus?: string }) =>
       request<{ added: Prospect[]; skipped_duplicates: number }>("/discovery/suggest", { method: "POST", ...json(b) }),
+    fromPage: (url: string) =>
+      request<{ added: Prospect[]; skipped_duplicates: number; found: number }>("/discovery/from-page", {
+        method: "POST",
+        ...json({ url }),
+      }),
     verify: (id: number, website?: string) =>
       request<Prospect>(`/discovery/${id}/verify`, { method: "POST", ...json(website ? { website } : {}) }),
     accept: (id: number) =>

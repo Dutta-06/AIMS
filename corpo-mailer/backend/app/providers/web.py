@@ -117,6 +117,8 @@ class _Extract(HTMLParser):
             a.get("property") == "og:site_name" or a.get("name") == "application-name"
         ):
             self.chunks.append(a.get("content") or "")
+        elif tag == "img" and self._href is not None:
+            self._anchor.append((a.get("alt") or a.get("title") or "").strip())  # a logo's name
         elif tag == "a" and a.get("href"):
             href = a["href"].strip()
             if href.lower().startswith("mailto:"):

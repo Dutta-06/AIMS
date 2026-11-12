@@ -52,6 +52,16 @@ def suggest(
         raise HTTPException(502, str(exc)) from None
 
 
+@router.post("/from-page", response_model=s.FromPageOut)
+def from_page(
+    body: s.FromPageIn,
+    db: Session = Depends(get_db),
+    fetcher: PageFetcher = Depends(get_fetcher),
+):
+    """Pull candidate companies out of a page that lists sponsors (no model involved)."""
+    return _guard(svc.extract_sponsors, db, fetcher, body.url.strip())
+
+
 @router.post("/{prospect_id}/verify", response_model=s.ProspectOut)
 def verify(
     prospect_id: int,
