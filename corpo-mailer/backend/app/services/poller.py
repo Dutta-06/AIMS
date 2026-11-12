@@ -5,7 +5,9 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import Settings
 from app.db.session import get_engine
-from app.providers.imap import get_mailbox
+from app.providers.google import get_oauth
+from app.providers.imap import build_mailbox
+from app.services import gmail
 from app.services.replies import sync_replies
 
 log = logging.getLogger("corpo.replies")
@@ -13,7 +15,9 @@ log = logging.getLogger("corpo.replies")
 
 def _sync_once(settings: Settings) -> None:
     with sessionmaker(get_engine(), expire_on_commit=False)() as db:
-        r = sync_replies(db, get_mailbox(), settings)
+        if not gmail.mail_ready(db, settings):
+            return  # nothing connected yet (or the connection needs redoing): nothing to check
+        r = sync_replies(db, build_mailbox(db, settings, get_oauth()), settings)
     if r.replies or r.bounces:
         log.info("reply sync: %s", r.as_dict())
 

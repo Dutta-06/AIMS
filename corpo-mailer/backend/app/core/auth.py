@@ -83,7 +83,9 @@ limiter = LoginLimiter()
 class AuthGate(BaseHTTPMiddleware):
     """Refuse API calls without a valid token when a password is configured."""
 
-    OPEN = {"/auth/login", "/auth/status"}
+    # The Gmail callback is a redirect from Google and can't carry a token; its one-time `state`
+    # (made by the signed-in Connect call) is what protects it.
+    OPEN = {"/auth/login", "/auth/status", "/gmail/callback"}
 
     async def dispatch(self, request, call_next):
         settings = get_settings()

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import auth as auth_routes
-from app.api.routes import crm, dashboard, discovery, drafts, imports, replies
+from app.api.routes import crm, dashboard, discovery, drafts, gmail, imports, replies
 from app.core.auth import AuthGate
 from app.core.config import get_settings
 from app.core.guard import RequestGuard
@@ -16,7 +16,9 @@ from app.services.poller import poll_forever
 async def lifespan(_: FastAPI):
     settings = get_settings()
     task = None
-    if settings.imap_configured and settings.imap_poll_seconds > 0:
+    # Gmail can be connected after startup, so start whenever there is a way to connect it; each
+    # round checks that something is connected before touching the mailbox.
+    if settings.imap_poll_seconds > 0 and (settings.imap_configured or settings.google_configured):
         task = asyncio.create_task(poll_forever(settings))
     yield
     if task:
@@ -41,6 +43,7 @@ def create_app() -> FastAPI:
     )
     p = settings.api_prefix
     app.include_router(auth_routes.router, prefix=f"{p}/auth", tags=["auth"])
+    app.include_router(gmail.router, prefix=f"{p}/gmail", tags=["gmail"])
     app.include_router(crm.router, prefix=p, tags=["crm"])
     app.include_router(imports.router, prefix=p, tags=["import/export"])
     app.include_router(drafts.router, prefix=f"{p}/drafts", tags=["drafts"])

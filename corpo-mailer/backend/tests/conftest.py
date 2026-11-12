@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.providers.google import GoogleOAuth, OAuthError, TokenSet, get_oauth
 from app.providers.imap import Fetched, MailboxError, get_mailbox
 from app.providers.llm import LLM, LLMError, get_llm
 from app.providers.mail import MailError, get_mailer
@@ -98,6 +99,38 @@ class FakeSearch:
         return self.hits
 
 
+class FakeGoogle(GoogleOAuth):
+    """A pretend Google. Set `tokens` for what a sign-in returns, or make refresh/exchange fail."""
+
+    def __init__(self) -> None:
+        self.tokens = TokenSet("access-1", 3600, "refresh-1", "team@gmail.com")
+        self.exchange_error: OAuthError | None = None
+        self.refresh_error: OAuthError | None = None
+        self.exchanged: list[dict] = []
+        self.refreshed = 0
+        self.revoked: list[str] = []
+        self.urls: list[dict] = []
+
+    def authorize_url(self, state, challenge, redirect_uri):
+        self.urls.append({"state": state, "challenge": challenge, "redirect_uri": redirect_uri})
+        return f"https://fake.google/auth?state={state}"
+
+    def exchange(self, code, verifier, redirect_uri):
+        self.exchanged.append({"code": code, "verifier": verifier, "redirect_uri": redirect_uri})
+        if self.exchange_error:
+            raise self.exchange_error
+        return self.tokens
+
+    def refresh(self, refresh_token):
+        self.refreshed += 1
+        if self.refresh_error:
+            raise self.refresh_error
+        return f"access-{self.refreshed + 1}", 3600
+
+    def revoke(self, token):
+        self.revoked.append(token)
+
+
 class FakeMailbox:
     """Stands in for IMAP. Put messages in `inbox`; `fetch` hands back those past the cursor."""
 
@@ -118,6 +151,11 @@ class FakeMailbox:
 @pytest.fixture
 def mailer():
     return FakeMailer()
+
+
+@pytest.fixture
+def google():
+    return FakeGoogle()
 
 
 @pytest.fixture
@@ -142,7 +180,12 @@ def mailbox():
 
 @pytest.fixture
 def imap_settings():
-    return Settings(smtp_user="us@gmail.com", smtp_password="app-pw")
+    return Settings(
+        smtp_user="us@gmail.com",
+        smtp_password="app-pw",
+        google_client_id="client-id",
+        google_client_secret="client-secret",
+    )
 
 
 @pytest.fixture
@@ -169,13 +212,14 @@ def db_session():
 
 
 @pytest.fixture
-def client(db_session, mailer, llm, mailbox, fetcher, search, imap_settings):
+def client(db_session, mailer, llm, mailbox, fetcher, search, google, imap_settings):
     app.dependency_overrides[get_db] = lambda: db_session
     app.dependency_overrides[get_mailer] = lambda: mailer
     app.dependency_overrides[get_llm] = lambda: llm
     app.dependency_overrides[get_mailbox] = lambda: mailbox
     app.dependency_overrides[get_fetcher] = lambda: fetcher
     app.dependency_overrides[get_search] = lambda: search
+    app.dependency_overrides[get_oauth] = lambda: google
     app.dependency_overrides[get_settings] = lambda: imap_settings
     with TestClient(app) as c:
         c.headers["X-Corpo-Mailer"] = "1"  # what the real frontend sends on every request

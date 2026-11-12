@@ -10,7 +10,7 @@ from app.models.enums import Channel, DraftStatus
 from app.providers.llm import LLM, get_llm
 from app.providers.mail import Mailer, get_mailer
 from app.schemas import api as s
-from app.services import drafting
+from app.services import drafting, gmail
 from app.services import drafts as svc
 
 router = APIRouter()
@@ -114,7 +114,7 @@ def approve(
     settings: Settings = Depends(get_settings),
 ):
     """Approve a draft. It is recorded as approved by the connected Gmail account."""
-    who = settings.smtp_user or "Team"
+    who = gmail.mail_identity(db, settings) or "Team"
     return _guard(svc.approve_draft, db, get_or_404(db, Draft, draft_id), who)
 
 

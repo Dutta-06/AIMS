@@ -202,3 +202,16 @@ def test_preflights_work_without_a_token_but_the_real_request_does_not(locked):
     assert (
         r.status_code == 401 and r.headers["access-control-allow-origin"] == PAGES
     )  # browser can read the 401
+
+
+# ------------------------------------------------------------------ Gmail connect with a password set
+def test_the_gmail_callback_works_without_a_token_but_connecting_needs_one(locked):
+    """Google redirects the browser to the callback, so it can't carry a token. Its one-time state
+    protects it instead; starting a connection still needs the sign-in."""
+    r = locked.get(
+        f"{API}/gmail/callback", params={"code": "x", "state": "forged"}, follow_redirects=False
+    )
+    assert r.status_code == 303 and "gmail=error" in r.headers["location"]
+    assert locked.post(f"{API}/gmail/connect", json={}).status_code == 401
+    assert locked.post(f"{API}/gmail/disconnect").status_code == 401
+    assert locked.get(f"{API}/gmail/status").status_code == 401

@@ -76,5 +76,5 @@ def test_unreachable_server_raises_mailbox_error(monkeypatch):
 
 def test_missing_credentials_are_reported():
     r = IMAPMailboxReader(Settings())
-    with pytest.raises(MailboxError, match="not configured"):
+    with pytest.raises(MailboxError, match="isn't connected"):
         r.fetch(uidvalidity=None, last_uid=0, lookback_days=14)

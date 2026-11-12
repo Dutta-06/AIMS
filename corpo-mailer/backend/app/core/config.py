@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     smtp_from_name: str = ""
 
     # Reply tracking over IMAP. Credentials default to the SMTP ones (same Gmail app password).
+    # "Connect Gmail" (OAuth). Create the client in Google Cloud once (docs/GMAIL_SETUP.md). When a
+    # Gmail account is connected, it is used instead of the app password above.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/v1/gmail/callback"
+
     imap_host: str = "imap.gmail.com"
     imap_port: int = 993
     imap_user: str = ""
@@ -39,6 +45,10 @@ class Settings(BaseSettings):
     @property
     def imap_login(self) -> tuple[str, str]:
         return (self.imap_user or self.smtp_user, self.imap_password or self.smtp_password)
+
+    @property
+    def google_configured(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
 
     @property
     def imap_configured(self) -> bool:

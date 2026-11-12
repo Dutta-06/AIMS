@@ -1,5 +1,6 @@
 """A tiny in-process IMAP server: just enough protocol to exercise IMAPMailboxReader."""
 
+import base64
 import re
 import socketserver
 import threading
@@ -23,6 +24,16 @@ class _Handler(socketserver.StreamRequestHandler):
                 ok = args.replace('"', "").split() == [srv.user, srv.password]
                 self.send(
                     f"{tag} OK logged in\r\n" if ok else f"{tag} NO [AUTHENTICATIONFAILED] bad\r\n"
+                )
+            elif cmd == "AUTHENTICATE" and args.upper() == "XOAUTH2":
+                self.send("+ \r\n")
+                got = base64.b64decode(self.rfile.readline().strip()).decode()
+                srv.oauth_logins.append(got)
+                want = f"user={srv.user}\x01auth=Bearer {srv.token}\x01\x01"
+                self.send(
+                    f"{tag} OK ok\r\n"
+                    if got == want
+                    else f"{tag} NO [AUTHENTICATIONFAILED] bad\r\n"
                 )
             elif cmd in ("SELECT", "EXAMINE"):
                 self.send(
@@ -64,6 +75,8 @@ class FakeIMAPServer(socketserver.ThreadingTCPServer):
         super().__init__(("127.0.0.1", 0), _Handler)
         self.messages, self.uidvalidity = messages, uidvalidity
         self.user, self.password = user, password
+        self.token = "good-token"  # accepted by AUTHENTICATE XOAUTH2
+        self.oauth_logins: list[str] = []
         self.commands: list[str] = []
         threading.Thread(target=self.serve_forever, daemon=True).start()
 

@@ -129,6 +129,23 @@ class Draft(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
 
 
+class GmailConnection(Base):
+    """The Gmail account the team connected with "Connect Gmail" (at most one row).
+
+    Holds a long-lived refresh token, which is as sensitive as a password: it lives only in this
+    database (on the computer running the backend) and is never sent to the browser.
+    """
+
+    __tablename__ = "gmail_connection"
+
+    id: Mapped[int] = mapped_column(primary_key=True)  # always 1
+    email: Mapped[str] = mapped_column(String(320))
+    refresh_token: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(32), default="connected")  # or "needs_reconnect"
+    last_error: Mapped[str | None] = mapped_column(Text)
+    connected_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
 class MailboxState(Base):
     """Where the reply tracker left off in each mailbox folder, and how the last sync went."""
 
