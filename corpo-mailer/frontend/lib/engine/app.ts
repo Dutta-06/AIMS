@@ -7,6 +7,7 @@ import { useSyncExternalStore } from "react";
 import { Core, sharedIds } from "./core";
 import type { Mailer } from "./drafts";
 import { Drafts, recoverInterruptedSends } from "./drafts";
+import { isAdmin } from "./admin";
 import { ApiError } from "./errors";
 import { GoogleAuth, loadGis, ReauthNeeded } from "./google/auth";
 import type { Gis, KeyValueStore } from "./google/auth";
@@ -419,7 +420,16 @@ export class App {
     this.patch({ phase: "needs_workspace", workspace: null, save: SIGNED_OUT, restored_unsaved: false });
   }
 
+  /** Whether the signed-in person may change the team's settings. */
+  isAdmin(): boolean {
+    return isAdmin(this.state.email);
+  }
+  private requireAdmin() {
+    if (!this.isAdmin()) throw new ApiError(403, "Only the team admins can do that");
+  }
+
   async shareWith(address: string): Promise<void> {
+    this.requireAdmin();
     const w = this.state.workspace;
     const email = address.trim().toLowerCase();
     if (!w || !this.drive) throw new ApiError(409, "No shared file is open");
@@ -487,6 +497,7 @@ export class App {
 
   /** Replace everything with a backup file. */
   restoreBackup(db: DB) {
+    this.requireAdmin();
     const { core } = this.ready();
     const next = normaliseDb(db);
     next.mailbox = core.db.mailbox; // the mailbox position belongs to this person, not the backup

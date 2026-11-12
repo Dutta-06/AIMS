@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import BackgroundMusic from "@/components/BackgroundMusic";
 import LenisProvider from "@/components/LenisProvider";
 import SignalProvider from "@/components/signal/SignalProvider";
 import ToastProvider from "@/components/ToastProvider";
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <ToastProvider>{children}</ToastProvider>
           </LenisProvider>
         </SignalProvider>
+        <BackgroundMusic />
       </body>
     </html>
   );

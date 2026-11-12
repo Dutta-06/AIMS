@@ -68,6 +68,15 @@ person paste it; it's remembered in that browser.)
 If the consent screen is **External**, a teammate must also be listed under **Test users** (step 2)
 before Google lets them sign in at all.
 
+## Who can change the settings
+
+Everyone on the team can use the dashboard. In **Settings** they only see **Your account**; the AI
+keys, event details, team list and backups are for the admins, which are `odwitiyo.dutta@gmail.com`
+and `aims@dtu.ac.in`. To change who the admins are, set a repository variable `ADMIN_EMAILS`
+(comma separated) next to `GOOGLE_CLIENT_ID` and re-run the Pages workflow. This hides the controls
+in the app; it is not a lock on the data itself (anyone you share the Drive file with as an editor
+could still change it in Drive).
+
 ## What to expect
 
 * **Different records never clash.** If two people edit the *same* lead at the same time, the later
