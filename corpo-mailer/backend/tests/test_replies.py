@@ -115,7 +115,9 @@ def test_mail_from_a_contact_we_never_emailed_is_not_a_reply(
     assert sync_replies(db_session, mailbox, imap_settings).unmatched == 1
 
 
-def test_auto_replies_and_our_own_mail_are_ignored(db_session, sent, mailbox, imap_settings):
+def test_auto_replies_and_our_own_mail_are_ignored(
+    db_session, sent, mailbox, imap_settings, connected
+):
     mailbox.inbox = [make(1, is_auto_reply=True), make(2, frm="us@gmail.com", mid="<own@x>")]
     r = sync_replies(db_session, mailbox, imap_settings)
     assert (r.replies, r.ignored) == (0, 2)
@@ -200,7 +202,7 @@ def test_mailbox_failure_is_recorded_and_cursor_untouched(db_session, sent, mail
 
 
 # ---- API
-def test_sync_endpoint_and_dashboard(client, db_session, sent, mailbox):
+def test_sync_endpoint_and_dashboard(client, db_session, sent, mailbox, connected):
     mailbox.inbox = [make(1)]
     r = client.post(f"{API}/replies/sync")
     assert r.status_code == 200 and r.json()["replies"] == 1
@@ -221,20 +223,14 @@ def test_marking_a_reply_seen_and_responded(client, sent, mailbox):
     assert client.get(f"{API}/dashboard").json()["new_replies"] == []
 
 
-def test_sync_endpoint_reports_mailbox_errors_as_502(client, mailbox):
+def test_sync_endpoint_reports_mailbox_errors_as_502(client, mailbox, connected):
     mailbox.fail = "Can't reach imap.gmail.com"
     r = client.post(f"{API}/replies/sync")
     assert r.status_code == 502 and "imap.gmail.com" in r.json()["detail"]
     assert client.get(f"{API}/replies/status").json()["last_error"]
 
 
-def test_sync_endpoint_says_so_when_imap_isnt_configured(client, imap_settings):
-    from app.core.config import get_settings
-    from app.main import app
-
-    app.dependency_overrides[get_settings] = lambda: imap_settings.model_copy(
-        update={"smtp_user": "", "smtp_password": ""}
-    )
+def test_sync_endpoint_says_so_when_gmail_isnt_connected(client):
     r = client.post(f"{API}/replies/sync")
-    assert r.status_code == 503 and "IMAP" in r.json()["detail"]
+    assert r.status_code == 503 and "connect Gmail in Settings" in r.json()["detail"]
     assert client.get(f"{API}/replies/status").json()["configured"] is False

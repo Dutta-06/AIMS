@@ -1,7 +1,7 @@
 # Publishes the Corpo Mailer website (corpo-mailer/frontend) to GitHub Pages.
 #
 # The site is only the interface: plain static files with no data and no secrets. The backend, the
-# database and the Gmail login stay on your own computer, and the backend checks the password.
+# database and the Gmail login stay on the backend you run, which only lets allowed Google accounts in.
 # Setup steps are in corpo-mailer/docs/HOSTING.md.
 name: Corpo Mailer website (GitHub Pages)
 

@@ -27,7 +27,7 @@ export function parseBackend(input: string): string {
     throw new Error("That doesn't look like a web address");
   }
   if (url.protocol !== "https:" && !(url.protocol === "http:" && LOCAL.has(url.hostname))) {
-    throw new Error("Use an https:// address (plain http is only allowed for localhost), so your password isn't sent in the open");
+    throw new Error("Use an https:// address (plain http is only allowed for localhost), so your sign-in isn't sent in the open");
   }
   if (url.username || url.password) throw new Error("Leave out any username or password");
   const path = url.pathname.replace(/\/+$/, "");

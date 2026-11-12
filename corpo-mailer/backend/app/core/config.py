@@ -1,7 +1,9 @@
+import re
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -12,48 +14,48 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./corpo_mailer.db"
     cors_origins: list[str] = ["http://localhost:3000"]
 
-    # One shared password for the whole team (there are no individual accounts). When set, every
-    # API request except signing in needs a token from POST /auth/login. Leave empty only while
-    # the backend is reachable from your own computer alone.
-    app_password: str = ""
+    # Who may use the site: the Google accounts listed here (comma-separated), signed in with
+    # "Sign in with Google". When set, every API request except signing in needs a session.
+    # Leave empty only while the backend can be reached from your own computer alone (then there is
+    # no sign-in at all).
+    allowed_emails: Annotated[list[str], NoDecode] = []
     session_hours: int = 12
     # Signs session tokens. If empty, a random one is made at startup, so restarting the backend
-    # signs everyone out. Changing app_password also signs everyone out.
+    # signs everyone out.
     session_secret: str = ""
 
+    # Gmail is connected with "Connect Gmail" (OAuth): there is no mail password to configure.
+    # Create the Google client once (docs/GMAIL_SETUP.md); sending (SMTP) and reply tracking
+    # (IMAP) then use the connected account's sign-in.
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
-    smtp_user: str = ""
-    smtp_password: str = ""
     smtp_from_name: str = ""
 
-    # Reply tracking over IMAP. Credentials default to the SMTP ones (same Gmail app password).
-    # "Connect Gmail" (OAuth). Create the client in Google Cloud once (docs/GMAIL_SETUP.md). When a
-    # Gmail account is connected, it is used instead of the app password above.
     google_client_id: str = ""
     google_client_secret: str = ""
-    google_redirect_uri: str = "http://localhost:8000/api/v1/gmail/callback"
+    google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
 
     imap_host: str = "imap.gmail.com"
     imap_port: int = 993
-    imap_user: str = ""
-    imap_password: str = ""
     imap_folder: str = "INBOX"
     imap_poll_seconds: int = 300  # 0 turns background polling off (manual sync still works)
     imap_lookback_days: int = 14  # how far back to look on the first run
 
+    @field_validator("allowed_emails", mode="before")
+    @classmethod
+    def _split_emails(cls, v):
+        """Accept ALLOWED_EMAILS=a@x.com,b@y.com (or a JSON list); compare case-insensitively."""
+        if isinstance(v, str):
+            v = re.split(r"[,;\s]+", v)
+        return list(dict.fromkeys(e.strip().lower() for e in v if str(e).strip()))
+
     @property
-    def imap_login(self) -> tuple[str, str]:
-        return (self.imap_user or self.smtp_user, self.imap_password or self.smtp_password)
+    def auth_required(self) -> bool:
+        return bool(self.allowed_emails)
 
     @property
     def google_configured(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret)
-
-    @property
-    def imap_configured(self) -> bool:
-        user, password = self.imap_login
-        return bool(user and password)
 
     @field_validator("database_url")
     @classmethod

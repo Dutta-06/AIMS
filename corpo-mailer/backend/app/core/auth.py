@@ -1,11 +1,14 @@
-"""One shared password, enforced by the backend.
+"""Who may use the site: Google accounts on the allow-list.
 
-The frontend can be a public static website (GitHub Pages), so it cannot keep anything secret:
-the password is checked *here*, and every API request without a valid token is refused. Tokens are
-stateless, signed and expire; they live in the browser and travel in an Authorization header (not
-a cookie, so a foreign website can't ride on them).
+The frontend can be a public static website (GitHub Pages), so it can't keep anything secret and
+checks nothing itself. People sign in with Google (see services/signin.py); the backend then hands
+the browser a signed, expiring session token naming the account, and refuses every API request
+without a valid one. The token travels in an Authorization header (not a cookie, so a foreign
+website can't ride on it). The allow-list is checked on every request, so removing someone from it
+cuts them off at once.
 """
 
+import base64
 import hashlib
 import hmac
 import secrets
@@ -20,34 +23,31 @@ _PROCESS_SECRET = secrets.token_hex(32)  # used when SESSION_SECRET isn't set
 
 
 def _key(settings: Settings) -> bytes:
-    # Bound to the password too, so changing the password invalidates every old token.
-    seed = f"{settings.session_secret or _PROCESS_SECRET}\x00{settings.app_password}"
-    return hashlib.sha256(seed.encode()).digest()
+    return hashlib.sha256((settings.session_secret or _PROCESS_SECRET).encode()).digest()
 
 
-def password_matches(settings: Settings, given: str) -> bool:
-    if not settings.app_password:
-        return False
-    return hmac.compare_digest(
-        hashlib.sha256(given.encode()).digest(),
-        hashlib.sha256(settings.app_password.encode()).digest(),
-    )
+def _sign(settings: Settings, payload: str) -> str:
+    return hmac.new(_key(settings), payload.encode(), hashlib.sha256).hexdigest()
 
 
-def make_token(settings: Settings, now: float | None = None) -> tuple[str, int]:
+def make_token(settings: Settings, email: str, now: float | None = None) -> tuple[str, int]:
     expires = int((now if now is not None else time.time()) + settings.session_hours * 3600)
-    sig = hmac.new(_key(settings), str(expires).encode(), hashlib.sha256).hexdigest()
-    return f"{expires}.{sig}", expires
+    payload = base64.urlsafe_b64encode(f"{email.lower()}|{expires}".encode()).decode().rstrip("=")
+    return f"{payload}.{_sign(settings, payload)}", expires
 
 
-def token_valid(settings: Settings, token: str, now: float | None = None) -> bool:
-    expires, _, sig = token.partition(".")
-    if not expires.isdigit() or not sig:
-        return False
-    good = hmac.new(_key(settings), expires.encode(), hashlib.sha256).hexdigest()
-    return hmac.compare_digest(sig, good) and int(expires) > (
-        now if now is not None else time.time()
-    )
+def token_email(settings: Settings, token: str, now: float | None = None) -> str | None:
+    """The signed-in account if the token is genuine, unexpired and the account is still allowed."""
+    payload, _, sig = token.partition(".")
+    if not payload or not sig or not hmac.compare_digest(sig, _sign(settings, payload)):
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode()
+        email, _, expires = raw.rpartition("|")
+        fresh = int(expires) > (now if now is not None else time.time())
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return email if fresh and email in settings.allowed_emails else None
 
 
 def bearer(request) -> str:
@@ -55,43 +55,26 @@ def bearer(request) -> str:
     return header[7:].strip() if header.lower().startswith("bearer ") else ""
 
 
-class LoginLimiter:
-    """After 5 wrong passwords in 10 minutes, wait a minute between further tries."""
-
-    def __init__(self, window: int = 600, limit: int = 5, lock: int = 60) -> None:
-        self.window, self.limit, self.lock = window, limit, lock
-        self.failures: list[float] = []
-
-    def wait(self, now: float | None = None) -> int:
-        """Seconds the caller must wait before trying again (0 if free to try)."""
-        now = now if now is not None else time.time()
-        self.failures = [t for t in self.failures if now - t < self.window]
-        if len(self.failures) >= self.limit:
-            return max(0, int(self.lock - (now - self.failures[-1])) + 1)
-        return 0
-
-    def failed(self, now: float | None = None) -> None:
-        self.failures.append(now if now is not None else time.time())
-
-    def succeeded(self) -> None:
-        self.failures.clear()
-
-
-limiter = LoginLimiter()
+def current_email(request) -> str | None:
+    """The signed-in account for this request, or None (also None when sign-in isn't turned on)."""
+    return getattr(request.state, "user", None)
 
 
 class AuthGate(BaseHTTPMiddleware):
-    """Refuse API calls without a valid token when a password is configured."""
+    """Refuse API calls without a valid session when sign-in is turned on."""
 
-    # The Gmail callback is a redirect from Google and can't carry a token; its one-time `state`
-    # (made by the signed-in Connect call) is what protects it.
-    OPEN = {"/auth/login", "/auth/status", "/gmail/callback"}
+    # Signing in itself can't need a session. The Google callback is a redirect from Google and
+    # can't carry one; its one-time `state` (made by the call that started it) protects it instead.
+    OPEN = {"/auth/status", "/auth/google/start", "/auth/google/callback", "/auth/exchange"}
 
     async def dispatch(self, request, call_next):
         settings = get_settings()
         path = request.url.path
-        guarded = path.startswith(settings.api_prefix) and request.method != "OPTIONS"
-        if settings.app_password and guarded and path[len(settings.api_prefix) :] not in self.OPEN:
-            if not token_valid(settings, bearer(request)):
+        request.state.user = None
+        if settings.auth_required:
+            email = token_email(settings, bearer(request))
+            request.state.user = email
+            guarded = path.startswith(settings.api_prefix) and request.method != "OPTIONS"
+            if guarded and path[len(settings.api_prefix) :] not in self.OPEN and email is None:
                 return JSONResponse({"detail": "Sign in required"}, status_code=401)
         return await call_next(request)

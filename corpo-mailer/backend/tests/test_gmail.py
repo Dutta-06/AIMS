@@ -24,20 +24,21 @@ from app.providers.google import (
 )
 from app.providers.imap import IMAPMailboxReader, MailboxError
 from app.providers.mail import MailError, SMTPMailer
-from app.services import gmail
+from app.services import gmail, oauth_state
 from tests.fake_imap import FakeIMAPServer
 from tests.test_imap_parsing import PLAIN_REPLY
 
 API = "/api/v1/gmail"
+AUTH = "/api/v1/auth"
 SITE = "http://localhost:3000"
 
 
 @pytest.fixture(autouse=True)
 def _fresh_state():
-    gmail._pending.clear()
+    oauth_state.clear()
     gmail._CACHE.clear()
     yield
-    gmail._pending.clear()
+    oauth_state.clear()
     gmail._CACHE.clear()
 
 
@@ -49,7 +50,7 @@ def begin(client, google, return_to=None):
 
 def finish(client, state, code="the-code", **extra):
     params = {"code": code, "state": state, **extra}
-    return client.get(f"{API}/callback", params=params, follow_redirects=False)
+    return client.get(f"{AUTH}/google/callback", params=params, follow_redirects=False)
 
 
 def connect(client, google, **kw):
@@ -65,7 +66,7 @@ def row(db_session):
 def test_status_before_connecting(client):
     s = client.get(f"{API}/status").json()
     assert s["configured"] is True and s["connected"] is False and s["email"] is None
-    assert s["redirect_uri"] == "http://localhost:8000/api/v1/gmail/callback"
+    assert s["redirect_uri"] == "http://localhost:8000/api/v1/auth/google/callback"
 
 
 def test_connecting_needs_the_one_time_google_setup(client, imap_settings):
@@ -81,7 +82,7 @@ def test_connect_returns_googles_page_with_a_one_time_state_and_a_pkce_challenge
     sent = google.urls[0]
     assert (
         len(sent["state"]) >= 20
-        and sent["redirect_uri"] == "http://localhost:8000/api/v1/gmail/callback"
+        and sent["redirect_uri"] == "http://localhost:8000/api/v1/auth/google/callback"
     )
     assert sent["challenge"]
     # a second attempt gets a different state
@@ -113,31 +114,31 @@ def test_a_state_works_once_only(client, google):
     state = begin(client, google)
     assert "gmail=connected" in finish(client, state).headers["location"]
     again = finish(client, state)
-    assert (
-        "gmail=error" in again.headers["location"] and "already+used" in again.headers["location"]
-    )
+    assert "error" in again.headers["location"] and "already+used" in again.headers["location"]
     assert len(google.exchanged) == 1
 
 
 def test_a_forged_or_unknown_state_connects_nothing(client, google, db_session):
     r = finish(client, "not-a-real-state")
-    assert r.status_code == 303 and "gmail=error" in r.headers["location"]
+    assert r.status_code == 303 and "reason=" in r.headers["location"]
     assert google.exchanged == [] and row(db_session) is None
 
 
 def test_missing_state_is_refused(client):
     assert (
-        client.get(f"{API}/callback", params={"code": "x"}, follow_redirects=False).status_code
+        client.get(
+            f"{AUTH}/google/callback", params={"code": "x"}, follow_redirects=False
+        ).status_code
         == 400
     )
 
 
 def test_an_old_state_expires(client, google, monkeypatch):
     state = begin(client, google)
-    later = time.time() + gmail.STATE_TTL + 5
-    monkeypatch.setattr(gmail.time, "time", lambda: later)
+    later = time.time() + oauth_state.STATE_TTL + 5
+    monkeypatch.setattr(oauth_state.time, "time", lambda: later)
     r = finish(client, state)
-    assert "gmail=error" in r.headers["location"] and google.exchanged == []
+    assert "reason=" in r.headers["location"] and google.exchanged == []
 
 
 def test_the_browser_is_only_ever_sent_back_to_the_teams_own_website(client, google):
@@ -153,7 +154,7 @@ def test_pressing_cancel_at_google_connects_nothing_and_explains(client, google,
     state = begin(client, google, return_to=f"{SITE}/settings/")
     r = finish(client, state, code="", error="access_denied")
     assert r.status_code == 303 and "gmail=error" in r.headers["location"]
-    assert "wasn%27t+connected" in r.headers["location"] and row(db_session) is None
+    assert "Gmail+was+cancelled" in r.headers["location"] and row(db_session) is None
     assert google.exchanged == []
     assert "already+used" in finish(client, state).headers["location"]  # the state was used up
 
@@ -209,7 +210,7 @@ def test_access_tokens_are_reused_until_they_are_nearly_stale(
     assert acct.access_token() != first and google.refreshed == 2
 
 
-def test_a_dead_connection_is_marked_and_mail_falls_back_to_the_app_password(
+def test_a_dead_connection_is_marked_and_mail_stops_until_it_is_reconnected(
     client, google, db_session, imap_settings
 ):
     acct = account(client, google, db_session, imap_settings)
@@ -222,13 +223,13 @@ def test_a_dead_connection_is_marked_and_mail_falls_back_to_the_app_password(
     s = client.get(f"{API}/status").json()
     assert s["needs_reconnect"] is True and s["connected"] is False and "expired" in s["last_error"]
     assert gmail.active_account(db_session, imap_settings, google) is None
-    assert (
-        gmail.mail_identity(db_session, imap_settings) == "us@gmail.com"
-    )  # the app-password address
+    assert gmail.mail_identity(db_session, imap_settings) is None  # no fallback address
+    assert gmail.mail_ready(db_session, imap_settings) is False
     # connecting again fixes it
     google.refresh_error = None
     connect(client, google)
     assert client.get(f"{API}/status").json()["connected"] is True
+    assert gmail.mail_ready(db_session, imap_settings) is True
 
 
 def test_a_temporary_google_hiccup_does_not_mark_it_dead(client, google, db_session, imap_settings):
@@ -252,7 +253,6 @@ def test_the_connected_account_is_who_approves_and_who_we_are(
 def test_reply_tracking_counts_as_set_up_once_gmail_is_connected(
     client, google, mailbox, imap_settings
 ):
-    imap_settings.smtp_password = ""  # no app password at all
     assert client.get("/api/v1/replies/status").json()["configured"] is False
     assert client.post("/api/v1/replies/sync").status_code == 503
     connect(client, google)
@@ -260,9 +260,7 @@ def test_reply_tracking_counts_as_set_up_once_gmail_is_connected(
     assert client.post("/api/v1/replies/sync").status_code == 200
 
 
-def test_the_poller_checks_for_a_connection_each_round(
-    db_session, google, imap_settings, monkeypatch
-):
+def test_the_poller_checks_for_a_connection_each_round(db_session, google, monkeypatch):
     from app.services import poller
 
     calls = []
@@ -273,10 +271,11 @@ def test_the_poller_checks_for_a_connection_each_round(
         lambda *a: calls.append(1) or type("R", (), {"replies": 0, "bounces": 0})(),
     )
     monkeypatch.setattr(poller, "get_oauth", lambda: google)
-    no_mail = Settings()  # nothing connected, no app password
-    poller._sync_once(no_mail)
+    poller._sync_once(Settings())  # nothing connected yet: it does nothing
     assert calls == []
-    poller._sync_once(imap_settings)  # app password present
+    db_session.add(GmailConnection(id=1, email="a@b.com", refresh_token="r", status="connected"))
+    db_session.commit()
+    poller._sync_once(Settings())  # connected: it checks for replies
     assert calls == [1]
 
 
@@ -371,13 +370,16 @@ def test_gmail_refusing_the_token_says_to_reconnect(smtp):
         SMTPMailer(Settings(), Acct()).send(to="a@b.com", subject="s", body="b")
 
 
-def test_the_app_password_path_still_works_and_needs_a_password(smtp):
-    SMTPMailer(Settings(smtp_user="us@gmail.com", smtp_password="pw")).send(
-        to="a@b.com", subject="s", body="b"
-    )
-    assert ("login", "us@gmail.com", "pw") in smtp.log and not any(e[0] == "auth" for e in smtp.log)
+def test_nothing_is_sent_when_gmail_isnt_connected_and_there_is_no_password_fallback(smtp):
     with pytest.raises(MailError, match="isn't connected"):
         SMTPMailer(Settings()).send(to="a@b.com", subject="s", body="b")
+    assert smtp.log == []  # no connection opened, and no way to log in with a password
+
+
+def test_there_is_no_mail_password_setting_any_more():
+    s = Settings()
+    for gone in ("smtp_user", "smtp_password", "imap_user", "imap_password", "imap_login"):
+        assert not hasattr(s, gone), gone
 
 
 def test_the_login_string_is_sent_once_then_challenges_get_an_empty_reply():
@@ -481,7 +483,7 @@ def http_client():
 
 def test_the_consent_url_asks_for_offline_access_with_pkce_and_state():
     url = http_client().authorize_url(
-        "STATE", "CHALLENGE", "http://localhost:8000/api/v1/gmail/callback"
+        "STATE", "CHALLENGE", "http://localhost:8000/api/v1/auth/google/callback"
     )
     q = {k: v[0] for k, v in parse_qs(urlsplit(url).query).items()}
     assert urlsplit(url).netloc == "accounts.google.com"

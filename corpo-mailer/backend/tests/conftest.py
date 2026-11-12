@@ -103,7 +103,7 @@ class FakeGoogle(GoogleOAuth):
     """A pretend Google. Set `tokens` for what a sign-in returns, or make refresh/exchange fail."""
 
     def __init__(self) -> None:
-        self.tokens = TokenSet("access-1", 3600, "refresh-1", "team@gmail.com")
+        self.tokens = TokenSet("access-1", 3600, "refresh-1", "team@gmail.com", True)
         self.exchange_error: OAuthError | None = None
         self.refresh_error: OAuthError | None = None
         self.exchanged: list[dict] = []
@@ -111,8 +111,19 @@ class FakeGoogle(GoogleOAuth):
         self.revoked: list[str] = []
         self.urls: list[dict] = []
 
-    def authorize_url(self, state, challenge, redirect_uri):
-        self.urls.append({"state": state, "challenge": challenge, "redirect_uri": redirect_uri})
+    def authorize_url(
+        self, state, challenge, redirect_uri, *, scope=None, offline=True, prompt="consent"
+    ):
+        self.urls.append(
+            {
+                "state": state,
+                "challenge": challenge,
+                "redirect_uri": redirect_uri,
+                "scope": scope,
+                "offline": offline,
+                "prompt": prompt,
+            }
+        )
         return f"https://fake.google/auth?state={state}"
 
     def exchange(self, code, verifier, redirect_uri):
@@ -129,6 +140,18 @@ class FakeGoogle(GoogleOAuth):
 
     def revoke(self, token):
         self.revoked.append(token)
+
+
+class FakeAccount:
+    """A connected mailbox as the providers see it: an address and a working access token."""
+
+    def __init__(self, email="us@gmail.com", token="good-token", error=None):
+        self.email, self.token, self.error = email, token, error
+
+    def access_token(self):
+        if self.error:
+            raise self.error
+        return self.token
 
 
 class FakeMailbox:
@@ -151,6 +174,17 @@ class FakeMailbox:
 @pytest.fixture
 def mailer():
     return FakeMailer()
+
+
+@pytest.fixture
+def connected(db_session):
+    """Gmail already connected as us@gmail.com (what 'Connect Gmail' leaves behind)."""
+    from app.models import GmailConnection
+
+    row = GmailConnection(id=1, email="us@gmail.com", refresh_token="refresh-0", status="connected")
+    db_session.add(row)
+    db_session.commit()
+    return row
 
 
 @pytest.fixture
@@ -180,12 +214,7 @@ def mailbox():
 
 @pytest.fixture
 def imap_settings():
-    return Settings(
-        smtp_user="us@gmail.com",
-        smtp_password="app-pw",
-        google_client_id="client-id",
-        google_client_secret="client-secret",
-    )
+    return Settings(google_client_id="client-id", google_client_secret="client-secret")
 
 
 @pytest.fixture

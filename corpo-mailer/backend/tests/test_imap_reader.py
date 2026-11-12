@@ -7,6 +7,7 @@ import pytest
 from app.core.config import Settings
 from app.providers import imap as imap_mod
 from app.providers.imap import IMAPMailboxReader, MailboxError
+from tests.conftest import FakeAccount
 from tests.fake_imap import FakeIMAPServer
 from tests.test_imap_parsing import BOUNCE, PLAIN_REPLY
 
@@ -24,8 +25,8 @@ def server(monkeypatch):
     srv.shutdown()
 
 
-def reader(password="app-pw"):
-    return IMAPMailboxReader(Settings(smtp_user="us@gmail.com", smtp_password=password))
+def reader(token="good-token"):
+    return IMAPMailboxReader(Settings(), FakeAccount("us@gmail.com", token))
 
 
 def test_first_run_searches_by_date_and_parses_everything(server):
@@ -60,9 +61,9 @@ def test_mailbox_is_opened_read_only_and_nothing_is_modified(server):
     assert all("BODY.PEEK" in c for c in server.commands if " FETCH " in c)  # never marks read
 
 
-def test_wrong_password_raises_a_clear_error(server):
+def test_a_rejected_token_raises_a_clear_error(server):
     with pytest.raises(MailboxError, match="IMAP error"):
-        reader(password="nope").fetch(uidvalidity=None, last_uid=0, lookback_days=14)
+        reader(token="stale").fetch(uidvalidity=None, last_uid=0, lookback_days=14)
 
 
 def test_unreachable_server_raises_mailbox_error(monkeypatch):

@@ -1,4 +1,5 @@
 import type {
+  AuthStatus,
   Channel,
   Company,
   Contact,
@@ -65,7 +66,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   } catch {
     throw new ApiError(0, "Can't reach the server. Is the backend running?");
   }
-  // A 401 on a normal call means the sign-in ran out (or the password changed): back to sign-in.
+  // A 401 on a normal call means the sign-in ran out (or you were removed from the allowed accounts): back to sign-in.
   if (res.status === 401 && !path.startsWith("/auth/")) signOut();
   if (!res.ok) {
     const body = await res.json().catch(() => null);
@@ -199,8 +200,13 @@ export const api = {
   },
 
   auth: {
-    status: () => request<{ required: boolean; authenticated: boolean }>("/auth/status"),
-    login: (password: string) =>
-      request<{ token: string; expires_at: number }>("/auth/login", { method: "POST", ...json({ password }) }),
+    status: () => request<AuthStatus>("/auth/status"),
+    start: (returnTo: string) =>
+      request<{ url: string }>("/auth/google/start", { method: "POST", ...json({ return_to: returnTo }) }),
+    exchange: (code: string) =>
+      request<{ token: string; expires_at: number; email: string }>("/auth/exchange", {
+        method: "POST",
+        ...json({ code }),
+      }),
   },
 };

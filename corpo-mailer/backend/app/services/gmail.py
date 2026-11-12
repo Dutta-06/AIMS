@@ -7,10 +7,8 @@ never leaves the backend) and saves the refresh token. After that `StoredAccount
 short-lived access tokens for sending (SMTP) and reading replies (IMAP).
 """
 
-import threading
 import time
 from dataclasses import dataclass
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy.orm import Session
 
@@ -18,11 +16,12 @@ from app.core.config import Settings
 from app.db.base import utcnow
 from app.models import GmailConnection
 from app.providers.google import (
+    MAIL_SCOPES,
     GoogleOAuth,
     OAuthError,
     challenge_for,
-    new_verifier,
 )
+from app.services import oauth_state
 
 
 class ConnectError(Exception):
@@ -33,62 +32,27 @@ class ConnectError(Exception):
         self.return_to = return_to
 
 
-# ------------------------------------------------------------------ one-time sign-in states
-STATE_TTL = 600  # seconds to finish the Google consent screen
-_pending: dict[str, dict] = {}
-_lock = threading.Lock()
-
-
-def _begin(return_to: str) -> tuple[str, str]:
-    state, verifier = new_verifier()[:32], new_verifier()
-    with _lock:
-        now = time.time()
-        for k in [k for k, v in _pending.items() if v["expires"] < now]:
-            del _pending[k]  # forget abandoned attempts
-        _pending[state] = {"verifier": verifier, "return_to": return_to, "expires": now + STATE_TTL}
-    return state, verifier
-
-
-def take_state(state: str) -> dict | None:
-    """Single use: a state can complete one sign-in, once, soon after it was made."""
-    with _lock:
-        entry = _pending.pop(state, None)
-    return entry if entry and entry["expires"] >= time.time() else None
-
-
-def safe_return_to(settings: Settings, return_to: str | None) -> str:
-    """Where to send the browser afterwards: only the team's own website, never another link."""
-    allowed = settings.cors_origins
-    if return_to:
-        parts = urlsplit(return_to)
-        if f"{parts.scheme}://{parts.netloc}" in allowed:
-            return return_to
-    return (allowed[0] if allowed else "http://localhost:3000").rstrip("/") + "/settings/"
-
-
-def with_result(url: str, **params: str) -> str:
-    parts = urlsplit(url)
-    query = [(k, v) for k, v in parse_qsl(parts.query) if k not in ("gmail", "reason")]
-    query += list(params.items())
-    return urlunsplit(parts._replace(query=urlencode(query), fragment=""))
-
-
 def start_connect(settings: Settings, oauth: GoogleOAuth, return_to: str | None) -> str:
     if not settings.google_configured:
         raise ConnectError(
             "Gmail sign-in isn't set up yet: add the Google client ID and secret first"
         )
-    state, verifier = _begin(safe_return_to(settings, return_to))
-    return oauth.authorize_url(state, challenge_for(verifier), settings.google_redirect_uri)
+    back = oauth_state.safe_return_to(settings, return_to)
+    state, verifier = oauth_state.begin("connect", back)
+    return oauth.authorize_url(
+        state,
+        challenge_for(verifier),
+        settings.google_redirect_uri,
+        scope=MAIL_SCOPES,
+        offline=True,
+        prompt="consent",
+    )
 
 
 def complete_connect(
-    db: Session, settings: Settings, oauth: GoogleOAuth, code: str, state: str
+    db: Session, settings: Settings, oauth: GoogleOAuth, code: str, entry: dict
 ) -> str:
-    """Finish the sign-in. Returns where to send the browser; raises ConnectError(.., return_to)."""
-    entry = take_state(state)
-    if entry is None:
-        raise ConnectError("That sign-in link has expired or was already used. Try Connect again.")
+    """Finish connecting. Returns where to send the browser; raises ConnectError(.., return_to)."""
     return_to = entry["return_to"]
     try:
         tokens = oauth.exchange(code, entry["verifier"], settings.google_redirect_uri)
@@ -164,7 +128,7 @@ def connection(db: Session) -> GmailConnection | None:
 
 
 def active_account(db: Session, settings: Settings, oauth: GoogleOAuth) -> StoredAccount | None:
-    """The connected Gmail account, if there is a working one (else the app password is used)."""
+    """The connected Gmail account, if there is a working one."""
     row = connection(db)
     if row is None or row.status != "connected":
         return None
@@ -172,16 +136,14 @@ def active_account(db: Session, settings: Settings, oauth: GoogleOAuth) -> Store
 
 
 def mail_identity(db: Session, settings: Settings) -> str | None:
-    """Who the team is sending as: the connected account, else the app-password address."""
+    """Who the team is sending as: the connected Gmail account, if there is a working one."""
     row = connection(db)
-    if row is not None and row.status == "connected":
-        return row.email
-    return settings.smtp_user or None
+    return row.email if row is not None and row.status == "connected" else None
 
 
 def mail_ready(db: Session, settings: Settings) -> bool:
     row = connection(db)
-    return bool(row and row.status == "connected") or settings.imap_configured
+    return bool(row and row.status == "connected")
 
 
 def status(db: Session, settings: Settings) -> dict:
@@ -194,5 +156,4 @@ def status(db: Session, settings: Settings) -> dict:
         "connected_at": row.connected_at if row else None,
         "last_error": row.last_error if row else None,
         "redirect_uri": settings.google_redirect_uri,
-        "app_password_user": settings.smtp_user or None if settings.smtp_password else None,
     }

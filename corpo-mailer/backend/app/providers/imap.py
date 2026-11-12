@@ -152,35 +152,27 @@ def parse_message(uid: int, raw: bytes, uidvalidity: int | None = None) -> Incom
 
 
 class IMAPMailboxReader:
-    """Reads the inbox over IMAP, logging in as the connected Gmail account (OAuth) when there is
-    one, otherwise with the app password from .env."""
+    """Reads the inbox over IMAP as the connected Gmail account (OAuth)."""
 
     def __init__(self, settings: Settings, account: OAuthAccount | None = None) -> None:
         self.s = settings
         self.account = account
 
     def fetch(self, *, uidvalidity: int | None, last_uid: int, lookback_days: int) -> Fetched:
-        user, password = self.s.imap_login
-        if self.account:
-            try:
-                token = self.account.access_token()
-            except OAuthError as exc:
-                raise MailboxError(str(exc)) from exc
-            user = self.account.email
-        elif not (user and password):
-            raise MailboxError(
-                "Gmail isn't connected. Connect it in Settings, or set IMAP_PASSWORD."
-            )
+        if self.account is None:
+            raise MailboxError("Gmail isn't connected. Connect it in Settings.")
+        try:
+            token = self.account.access_token()
+        except OAuthError as exc:
+            raise MailboxError(str(exc)) from exc
+        user = self.account.email
         try:
             conn = imaplib.IMAP4_SSL(self.s.imap_host, self.s.imap_port, timeout=30)
         except OSError as exc:
             raise MailboxError(f"Can't reach {self.s.imap_host}: {exc}") from exc
         try:
-            if self.account:
-                auth = xoauth2_authobject(user, token)
-                conn.authenticate("XOAUTH2", lambda challenge: auth(challenge).encode())
-            else:
-                conn.login(user, password)
+            auth = xoauth2_authobject(user, token)
+            conn.authenticate("XOAUTH2", lambda challenge: auth(challenge).encode())
             typ, _ = conn.select(f'"{self.s.imap_folder}"', readonly=True)
             if typ != "OK":
                 raise MailboxError(f"Can't open folder {self.s.imap_folder!r}")

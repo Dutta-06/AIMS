@@ -14,7 +14,7 @@ def test_unapproved_draft_cannot_be_sent(client, draft, mailer):
     assert mailer.sent == []
 
 
-def test_approve_then_send(client, lead, draft, mailer):
+def test_approve_then_send(client, lead, draft, mailer, connected):
     approved = client.post(f"{API}/drafts/{draft['id']}/approve").json()
     assert approved["status"] == "approved" and approved["approved_by"] == "us@gmail.com"
 
@@ -33,10 +33,16 @@ def test_approve_then_send(client, lead, draft, mailer):
     ]
 
 
-def test_approval_is_recorded_against_the_connected_gmail_account_not_a_typed_name(client, draft):
+def test_approval_is_recorded_against_the_connected_gmail_account_not_a_typed_name(
+    client, draft, connected
+):
     """A name in the request body is ignored: there is no per-person identity to claim."""
     r = client.post(f"{API}/drafts/{draft['id']}/approve", json={"by": "Someone Else"})
     assert r.json()["approved_by"] == "us@gmail.com"
+
+
+def test_without_a_connected_account_the_approver_is_just_the_team(client, draft):
+    assert client.post(f"{API}/drafts/{draft['id']}/approve").json()["approved_by"] == "Team"
 
 
 def test_sending_never_moves_a_responded_contact_backwards(client, lead, draft):

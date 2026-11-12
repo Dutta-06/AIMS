@@ -43,20 +43,35 @@ throwaway one):
 TEST_DATABASE_URL=postgresql://corpo:corpo@localhost:5432/corpo_mailer_test uv run pytest
 ```
 
-## No login
+## Who can use it: Google sign-in
 
-There are no accounts or passwords. Instead:
+There are no passwords and no individual accounts to manage: people sign in with Google, and the
+backend checks the account against a list.
 
-* The backend listens on **127.0.0.1 only** (`main.py`). Don't expose it to a network or the
-  internet: anyone who can reach it can approve and send email from your Gmail account.
+* **`ALLOWED_EMAILS`** lists the Google accounts that may use the site (comma-separated, case
+  insensitive). When it is set, every API request except the sign-in steps needs a session; when it is
+  empty there is no sign-in at all, which is only safe while the backend can be reached from your own
+  computer. The list is checked on every request, so removing someone cuts them off at once.
+* **Sign-in flow**: `POST /auth/google/start` returns Google's page (it asks for just the email
+  address), Google sends the browser to `GET /auth/google/callback`, and the website trades the
+  one-time login code in the redirect for a session with `POST /auth/exchange`. The session is a signed
+  token naming the account, expiring after `SESSION_HOURS` (12), sent as `Authorization: Bearer ...`. It
+  never appears in a web address. `GET /auth/status` says whether sign-in is on, whether Google is
+  set up, and who is signed in.
+* The callback can't carry a session (it is a redirect from Google), so its **single-use, 10-minute
+  `state`** (with PKCE) protects it. The browser is only ever sent back to a website in `CORS_ORIGINS`.
+  The sign-in callback and the "Connect Gmail" callback are the same address; the `state` says which.
+* Approving a draft records the **signed-in account** as the approver; a name sent in the request is
+  ignored. Leads aren't assigned to people.
+* The API docs pages (`/docs`, `/redoc`, `/openapi.json`) are switched off when sign-in is on.
+* The backend listens on **127.0.0.1 only** (`main.py`). With sign-in on you can run it somewhere
+  reachable (a Codespace); with it off, don't expose it: anyone who can reach it could approve and send
+  email from your Gmail account.
 * Every state-changing request must come from an allowed origin (`CORS_ORIGINS`) **and** carry an
   `X-Corpo-Mailer: 1` header. A website you happen to visit can make your browser send a bare
   `POST /drafts/1/send` to `localhost`; the missing header (and the foreign origin) get it refused.
-* **One shared password** (`APP_PASSWORD`) guards the whole API: sign in with `POST /auth/login`, send
-  the token as `Authorization: Bearer ...`. `GET /auth/status` says whether a password is needed. There is
-  still no "who is logged in" (no individual accounts), and leads aren't assigned to people. Approving a draft records
-  the connected Gmail account (`SMTP_USER`) as the approver; any name sent in the request is ignored.
-  (The team uses a Gmail app password, not OAuth sign-in, so there is one shared identity.)
+* Old `APP_PASSWORD` / `SMTP_PASSWORD` / `IMAP_PASSWORD` lines are no longer used; the backend says so
+  at startup if it finds them.
 
 ## The tracker
 
@@ -113,8 +128,8 @@ so run `uv run python scripts/list_free_models.py` to get the exact current IDs.
 ## Reply tracking
 
 The backend watches the sending mailbox over IMAP (read-only: it never marks, moves or deletes
-mail). Set `SMTP_USER`/`SMTP_PASSWORD` (the Gmail app password also works for IMAP; enable IMAP in
-Gmail's settings). It checks every `IMAP_POLL_SECONDS`, and `POST /api/v1/replies/sync` (the
+mail) as the Gmail account connected in **Settings → Connect Gmail** (enable IMAP in Gmail's settings).
+It checks every `IMAP_POLL_SECONDS`, and `POST /api/v1/replies/sync` (the
 dashboard's "Check for replies" button) checks immediately.
 
 For each new message:
@@ -226,8 +241,8 @@ The easy way to give the app a mailbox. After the one-time Google setup in
 [`../docs/GMAIL_SETUP.md`](../docs/GMAIL_SETUP.md) (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`), a
 signed-in person presses **Connect Gmail** in Settings.
 
-* `GET /gmail/status`, `POST /gmail/connect` (returns Google's consent URL), `GET /gmail/callback`
-  (where Google sends the browser back), `POST /gmail/disconnect` (also revokes at Google).
+* `GET /gmail/status`, `POST /gmail/connect` (returns Google's consent URL), `GET /auth/google/callback`
+  (where Google sends the browser back, shared with sign-in), `POST /gmail/disconnect` (also revokes at Google).
 * The backend does the token exchange (the client secret never leaves it) with PKCE and a
   **single-use, 10-minute `state`**. The callback can't carry a sign-in token (Google redirects the
   browser to it), so that `state` is what protects it; connecting itself needs the sign-in. The
@@ -236,13 +251,14 @@ signed-in person presses **Connect Gmail** in Settings.
 * Sending (SMTP) and reading replies (IMAP) are the same code as before, logging in with an OAuth
   access token (XOAUTH2) instead of a password. Scope: `https://mail.google.com/`, which is what
   Gmail requires for that. If a refresh fails permanently the connection is marked *needs
-  reconnecting* (the Settings page says so) and mail falls back to the app password if one is set.
+  reconnecting* (the Settings page says so) and sending and reply tracking stop until it is reconnected.
+  There is no mail-password fallback.
 * Approvals are recorded against the connected account.
 
 ## Running in a GitHub Codespace
 
 `.devcontainer/corpo-mailer/devcontainer.json` and `scripts/codespace-start.sh` set up and start the
-backend in a Codespace, take secrets (`APP_PASSWORD`, `OPENROUTER_API_KEY`, ...) from Codespaces
+backend in a Codespace, take secrets (`ALLOWED_EMAILS`, `OPENROUTER_API_KEY`, ...) from Codespaces
 secrets, work out the Codespace's address for the Google redirect and CORS, and refuse to start
-without `APP_PASSWORD`. With a password set the API docs pages (`/docs`, `/redoc`, `/openapi.json`) are
+without `ALLOWED_EMAILS`. With sign-in on, the API docs pages (`/docs`, `/redoc`, `/openapi.json`) are
 disabled. See [`../docs/CODESPACES.md`](../docs/CODESPACES.md).

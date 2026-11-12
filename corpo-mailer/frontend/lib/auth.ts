@@ -8,7 +8,7 @@ import { useSyncExternalStore } from "react";
 const KEY = "corpo.session";
 export const SIGNED_OUT = "corpo:signed-out";
 
-type Session = { token: string; expires_at: number };
+type Session = { token: string; expires_at: number; email?: string };
 
 function read(): Session | null {
   try {
@@ -22,10 +22,11 @@ function read(): Session | null {
 }
 
 export const getToken = (): string | null => (typeof window === "undefined" ? null : (read()?.token ?? null));
+export const getEmail = (): string | null => (typeof window === "undefined" ? null : (read()?.email ?? null));
 
-export function saveSession(token: string, expiresAt: number) {
+export function saveSession(token: string, expiresAt: number, email?: string) {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify({ token, expires_at: expiresAt }));
+    window.localStorage.setItem(KEY, JSON.stringify({ token, expires_at: expiresAt, email }));
   } catch {
     /* without storage you'll just be asked again on the next page load */
   }
@@ -53,6 +54,9 @@ function subscribe(onChange: () => void) {
     window.removeEventListener(SIGNED_OUT, onChange);
   };
 }
+
+/** Who is signed in in this browser (null if nobody, and on the server render). */
+export const useSignedInEmail = () => useSyncExternalStore(subscribe, getEmail, () => null);
 
 /** Does this browser hold a sign-in right now? (False on the server render.) */
 export const useSignedIn = () => useSyncExternalStore(subscribe, () => getToken() !== null, () => false);

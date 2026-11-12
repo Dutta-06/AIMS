@@ -59,6 +59,14 @@ export type Interaction = {
 export type DraftStatus = "draft" | "approved" | "sending" | "sent";
 export type DraftKind = "intro" | "followup" | "thank_you";
 
+export type AuthStatus = {
+  required: boolean; // false: no accounts are listed on the backend, so there is no sign-in at all
+  configured: boolean; // the one-time Google setup is done
+  authenticated: boolean;
+  email: string | null;
+  allowed: string[]; // who may use the site (only shown to people who are signed in)
+};
+
 export type GmailStatus = {
   configured: boolean; // the one-time Google setup is done on the backend
   connected: boolean;
@@ -67,7 +75,6 @@ export type GmailStatus = {
   connected_at: string | null;
   last_error: string | null;
   redirect_uri: string;
-  app_password_user: string | null; // the fallback app-password address, if one is set
 };
 
 export type Revision = { subject: string; body: string; feedback: string; at: string };

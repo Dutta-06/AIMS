@@ -29,8 +29,10 @@ LinkedIn, Discord and/or Personal (multi-select).
 
 ## Who's using it?
 
-There is one shared team password (checked by the backend) and no individual accounts or names: leads aren't assigned to people. Approvals are recorded against
-the connected Gmail account (one shared app-password login; there is no per-person sign-in).
+People sign in with **Sign in with Google**; the backend only lets in the accounts in its
+`ALLOWED_EMAILS` list. There are no passwords, no individual user management, and leads aren't
+assigned to people. Approvals are recorded against the account that approved. **Settings** shows who
+can use the site and lets you connect the mailbox the team sends from.
 
 ## Sending
 

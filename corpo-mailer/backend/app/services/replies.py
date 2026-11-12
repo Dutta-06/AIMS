@@ -152,11 +152,7 @@ def sync_replies(db: Session, reader: MailboxReader, settings: Settings) -> Sync
         db.commit()
         raise
 
-    own = {
-        a.lower()
-        for a in (settings.imap_login[0], settings.smtp_user, gmail.mail_identity(db, settings))
-        if a
-    }
+    own = {a.lower() for a in (gmail.mail_identity(db, settings),) if a}
     seen = set(
         db.scalars(
             select(Interaction.message_id).where(

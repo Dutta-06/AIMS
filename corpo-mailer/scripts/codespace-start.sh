@@ -6,14 +6,15 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../backend"
 
-# A Codespace backend can be reached from the internet, so it must have a password.
-if [ -z "${APP_PASSWORD:-}" ]; then
+# A Codespace backend can be reached from the internet, so it must say who may use it.
+if [ -z "${ALLOWED_EMAILS:-}" ]; then
   cat <<'MSG'
 
-  The backend was NOT started: no team password is set.
+  The backend was NOT started: nobody is listed as allowed to use it.
 
-  Add a Codespaces secret named APP_PASSWORD (GitHub > Settings > Codespaces > Secrets, give it
-  access to this repository), then restart the Codespace or run this script again.
+  Add a Codespaces secret named ALLOWED_EMAILS with the Google accounts that may sign in,
+  comma-separated (GitHub > Settings > Codespaces > Secrets, give it access to this repository),
+  then restart the Codespace or run this script again.
 
 MSG
   exit 1
@@ -30,9 +31,14 @@ else
 fi
 PAGES="https://${OWNER:-your-username}.github.io"
 
-# Where Google sends the browser after "Connect Gmail", and which websites may call this backend.
-export GOOGLE_REDIRECT_URI="${GOOGLE_REDIRECT_URI:-${BACKEND}/api/v1/gmail/callback}"
+# Where Google sends the browser after signing in / connecting Gmail, and which websites may call it.
+export GOOGLE_REDIRECT_URI="${GOOGLE_REDIRECT_URI:-${BACKEND}/api/v1/auth/google/callback}"
 export CORS_ORIGINS="${CORS_ORIGINS:-[\"${PAGES}\",\"${FRONTEND_DEV}\"]}"
+
+if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
+  echo "  Note: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET aren't set, so nobody can sign in yet."
+  echo "  Follow docs/GMAIL_SETUP.md, add them as Codespaces secrets, then restart."
+fi
 
 uv sync --quiet
 uv run alembic upgrade head >/tmp/corpo-migrate.log 2>&1 || { echo "Database setup failed; see /tmp/corpo-migrate.log"; exit 1; }

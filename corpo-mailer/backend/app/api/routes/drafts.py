@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_or_404
+from app.core import auth
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.models import Contact, Draft
@@ -110,11 +111,13 @@ def mark_sent(draft_id: int, db: Session = Depends(get_db)):
 @router.post("/{draft_id}/approve", response_model=s.DraftOut)
 def approve(
     draft_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
-    """Approve a draft. It is recorded as approved by the connected Gmail account."""
-    who = gmail.mail_identity(db, settings) or "Team"
+    """Approve a draft. It is recorded as approved by whoever is signed in (their Google account),
+    else the connected Gmail account, else just "Team". A name sent in the request is ignored."""
+    who = auth.current_email(request) or gmail.mail_identity(db, settings) or "Team"
     return _guard(svc.approve_draft, db, get_or_404(db, Draft, draft_id), who)
 
 

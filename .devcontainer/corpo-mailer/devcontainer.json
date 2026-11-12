@@ -8,7 +8,7 @@
     "8000": { "label": "Corpo Mailer backend", "onAutoForward": "notify" }
   },
   "secrets": {
-    "APP_PASSWORD": { "description": "The team password for the Corpo Mailer website (required)." },
+    "ALLOWED_EMAILS": { "description": "Google accounts allowed to use the site, comma-separated (required)." },
     "OPENROUTER_API_KEY": { "description": "OpenRouter key, for the AI drafts." },
     "GOOGLE_CLIENT_ID": { "description": "Google OAuth client ID, for Connect Gmail." },
     "GOOGLE_CLIENT_SECRET": { "description": "Google OAuth client secret, for Connect Gmail." },

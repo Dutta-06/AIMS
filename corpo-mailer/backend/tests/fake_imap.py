@@ -20,11 +20,6 @@ class _Handler(socketserver.StreamRequestHandler):
             cmd = cmd.upper()
             if cmd == "CAPABILITY":
                 self.send(f"* CAPABILITY IMAP4rev1\r\n{tag} OK done\r\n")
-            elif cmd == "LOGIN":
-                ok = args.replace('"', "").split() == [srv.user, srv.password]
-                self.send(
-                    f"{tag} OK logged in\r\n" if ok else f"{tag} NO [AUTHENTICATIONFAILED] bad\r\n"
-                )
             elif cmd == "AUTHENTICATE" and args.upper() == "XOAUTH2":
                 self.send("+ \r\n")
                 got = base64.b64decode(self.rfile.readline().strip()).decode()
@@ -69,12 +64,10 @@ class FakeIMAPServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(
-        self, messages: dict[int, bytes], uidvalidity=42, user="us@gmail.com", password="app-pw"
-    ):
+    def __init__(self, messages: dict[int, bytes], uidvalidity=42, user="us@gmail.com"):
         super().__init__(("127.0.0.1", 0), _Handler)
         self.messages, self.uidvalidity = messages, uidvalidity
-        self.user, self.password = user, password
+        self.user = user
         self.token = "good-token"  # accepted by AUTHENTICATE XOAUTH2
         self.oauth_logins: list[str] = []
         self.commands: list[str] = []

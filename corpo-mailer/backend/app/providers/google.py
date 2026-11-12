@@ -22,7 +22,9 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
-SCOPES = "https://mail.google.com/ openid email"
+# Signing in only needs to know who you are. Connecting a mailbox also needs mail access.
+SIGNIN_SCOPES = "openid email"
+MAIL_SCOPES = "https://mail.google.com/ openid email"
 
 
 class OAuthError(Exception):
@@ -39,10 +41,20 @@ class TokenSet:
     expires_in: int
     refresh_token: str | None = None
     email: str | None = None
+    email_verified: bool = False
 
 
 class GoogleOAuth(Protocol):
-    def authorize_url(self, state: str, challenge: str, redirect_uri: str) -> str: ...
+    def authorize_url(
+        self,
+        state: str,
+        challenge: str,
+        redirect_uri: str,
+        *,
+        scope: str = MAIL_SCOPES,
+        offline: bool = True,
+        prompt: str = "consent",
+    ) -> str: ...
     def exchange(self, code: str, verifier: str, redirect_uri: str) -> TokenSet: ...
     def refresh(self, refresh_token: str) -> tuple[str, int]: ...
     def revoke(self, token: str) -> None: ...
@@ -89,18 +101,28 @@ class HttpGoogleOAuth:
     def __init__(self, settings: Settings) -> None:
         self.s = settings
 
-    def authorize_url(self, state: str, challenge: str, redirect_uri: str) -> str:
+    def authorize_url(
+        self,
+        state: str,
+        challenge: str,
+        redirect_uri: str,
+        *,
+        scope: str = MAIL_SCOPES,
+        offline: bool = True,
+        prompt: str = "consent",
+    ) -> str:
         params = {
             "client_id": self.s.google_client_id,
             "redirect_uri": redirect_uri,
             "response_type": "code",
-            "scope": SCOPES,
-            "access_type": "offline",  # a refresh token, so it keeps working without you
-            "prompt": "consent",  # always return one, even if you've connected before
+            "scope": scope,
+            "prompt": prompt,  # connecting: "consent" always returns a refresh token
             "state": state,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
         }
+        if offline:
+            params["access_type"] = "offline"  # a refresh token, so it keeps working without you
         return f"{AUTH_URL}?{urlencode(params)}"
 
     def _post(self, url: str, data: dict) -> httpx.Response:
@@ -129,14 +151,17 @@ class HttpGoogleOAuth:
         token = body.get("access_token")
         if not token:
             raise OAuthError("Google didn't return an access token")
-        email = None
+        email, verified = None, False
         try:
             u = httpx.get(USERINFO_URL, headers={"Authorization": f"Bearer {token}"}, timeout=15)
             if u.status_code == 200:
-                email = u.json().get("email")
+                info = u.json()
+                email, verified = info.get("email"), info.get("email_verified") is True
         except httpx.HTTPError:
             pass
-        return TokenSet(token, int(body.get("expires_in", 3600)), body.get("refresh_token"), email)
+        return TokenSet(
+            token, int(body.get("expires_in", 3600)), body.get("refresh_token"), email, verified
+        )
 
     def refresh(self, refresh_token: str) -> tuple[str, int]:
         r = self._post(
