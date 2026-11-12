@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import BackendAddress from "@/components/BackendAddress";
 import { Button, Card, ErrorNote, Loading } from "@/components/ui";
 import { api } from "@/lib/api";
 import { SIGNED_OUT } from "@/lib/auth";
@@ -56,6 +57,12 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           <Button variant="primary" onClick={retry}>
             Try again
           </Button>
+          <details className="border-t border-hairline pt-3 text-sm">
+            <summary className="cursor-pointer text-body hover:text-heading">Using a different backend (for example a Codespace)?</summary>
+            <div className="pt-3">
+              <BackendAddress />
+            </div>
+          </details>
         </Card>
       </main>
     );

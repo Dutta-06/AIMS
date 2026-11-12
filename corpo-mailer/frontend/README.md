@@ -70,3 +70,10 @@ sign-in token instead of being a plain link. `NEXT_PUBLIC_BASE_PATH` (the `/<rep
 `/settings` has **Connect Gmail**: it sends you to Google, brings you back, and shows the connected
 account with **Reconnect** and **Disconnect**. Until the one-time Google setup is done it shows the
 steps (with the redirect address to copy). Setup: [`../docs/GMAIL_SETUP.md`](../docs/GMAIL_SETUP.md).
+
+## Choosing the backend
+
+The sign-in page (and the "Can't reach the backend" screen) has a **Backend address** box, so the
+static site can be pointed at a local backend or a GitHub Codespace without rebuilding. The address
+is validated (https only, except localhost), remembered in this browser, and changing it signs you
+out. See [`../docs/CODESPACES.md`](../docs/CODESPACES.md).

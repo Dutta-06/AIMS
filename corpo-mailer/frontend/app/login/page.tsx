@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import BackendAddress from "@/components/BackendAddress";
 import { Button, Card, ErrorNote, Field, Input } from "@/components/ui";
 import { api } from "@/lib/api";
 import { saveSession } from "@/lib/auth";
@@ -52,6 +53,12 @@ export default function LoginPage() {
             {busy ? "Checking…" : "Sign in"}
           </Button>
         </form>
+        <details className="text-sm" open={Boolean(error && /reach/i.test(error))}>
+          <summary className="cursor-pointer text-body hover:text-heading">Backend address</summary>
+          <div className="pt-3">
+            <BackendAddress />
+          </div>
+        </details>
         <p className="text-xs text-faint">
           This page is only the interface. The password is checked by the backend on your computer, and nothing is stored here but a sign-in that expires.
         </p>

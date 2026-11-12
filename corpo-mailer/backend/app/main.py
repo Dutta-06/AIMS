@@ -27,7 +27,14 @@ async def lifespan(_: FastAPI):
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title=settings.project_name, lifespan=lifespan)
+    # With a password set the backend may be reachable from the internet (e.g. a Codespace), so it
+    # doesn't advertise its own API: no interactive docs or schema pages.
+    docs = (
+        {}
+        if not settings.app_password
+        else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    )
+    app = FastAPI(title=settings.project_name, lifespan=lifespan, **docs)
     # Added first = inner. CORS is added last so it is outermost and answers preflights itself.
     app.add_middleware(AuthGate)
     app.add_middleware(RequestGuard, allowed_origins=settings.cors_origins)

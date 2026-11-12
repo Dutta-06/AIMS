@@ -11,6 +11,10 @@ running on your own computer**, and the website talks to it.
  http://localhost:8000              (your computer: data, Gmail, AI, and the password check)
 ```
 
+**Where the backend runs:** on your own computer (this page), or in a **GitHub Codespace** with no
+install at all: see [`CODESPACES.md`](CODESPACES.md). Either way the website is told where the backend
+is on its sign-in page (**Backend address**), so you never rebuild it when that changes.
+
 ## Is it safe that the website is public?
 
 Yes, because the website holds nothing. Anyone can open the page, but all they see is a sign-in box,
@@ -64,9 +68,9 @@ If the backend isn't running, the page says so and has a **Try again** button.
 * **Browsers.** Chrome, Edge and Firefox let an https page talk to `http://localhost`. **Safari
   blocks it**, so use one of the others. Chrome may ask for permission to "connect to devices on your
   local network": choose **Allow**.
-* **Where it points.** The build uses `http://localhost:8000/api/v1`. To point it elsewhere, set a
-  repository variable `CORPO_API_URL` (*Settings → Secrets and variables → Actions → Variables*) and
-  re-run the workflow.
+* **Where it points.** By default the site talks to `http://localhost:8000/api/v1`. To use another
+  backend (a Codespace, say), open **Backend address** on the sign-in page and type its address; the
+  browser remembers it. (Only a person typing it can change it, never a link.)
 * **Never expose the backend to the internet** as it is: it speaks plain http, and anyone who got the
   password could approve and send email from your Gmail. If you ever host it online, put it behind
   https first.

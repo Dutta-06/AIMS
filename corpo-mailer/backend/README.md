@@ -238,3 +238,11 @@ signed-in person presses **Connect Gmail** in Settings.
   Gmail requires for that. If a refresh fails permanently the connection is marked *needs
   reconnecting* (the Settings page says so) and mail falls back to the app password if one is set.
 * Approvals are recorded against the connected account.
+
+## Running in a GitHub Codespace
+
+`.devcontainer/corpo-mailer/devcontainer.json` and `scripts/codespace-start.sh` set up and start the
+backend in a Codespace, take secrets (`APP_PASSWORD`, `OPENROUTER_API_KEY`, ...) from Codespaces
+secrets, work out the Codespace's address for the Google redirect and CORS, and refuse to start
+without `APP_PASSWORD`. With a password set the API docs pages (`/docs`, `/redoc`, `/openapi.json`) are
+disabled. See [`../docs/CODESPACES.md`](../docs/CODESPACES.md).

@@ -215,3 +215,12 @@ def test_the_gmail_callback_works_without_a_token_but_connecting_needs_one(locke
     assert locked.post(f"{API}/gmail/connect", json={}).status_code == 401
     assert locked.post(f"{API}/gmail/disconnect").status_code == 401
     assert locked.get(f"{API}/gmail/status").status_code == 401
+
+
+def test_a_password_protected_backend_does_not_publish_its_api_docs(locked):
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert locked.get(path).status_code == 404, path
+
+
+def test_without_a_password_the_docs_are_there_for_developers(client):
+    assert client.get("/openapi.json").status_code == 200

@@ -1,0 +1,18 @@
+{
+  "name": "Corpo Mailer backend",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "onCreateCommand": "pip install --quiet uv && cd corpo-mailer/backend && uv sync",
+  "postStartCommand": "bash corpo-mailer/scripts/codespace-start.sh",
+  "forwardPorts": [8000],
+  "portsAttributes": {
+    "8000": { "label": "Corpo Mailer backend", "onAutoForward": "notify" }
+  },
+  "secrets": {
+    "APP_PASSWORD": { "description": "The team password for the Corpo Mailer website (required)." },
+    "OPENROUTER_API_KEY": { "description": "OpenRouter key, for the AI drafts." },
+    "GOOGLE_CLIENT_ID": { "description": "Google OAuth client ID, for Connect Gmail." },
+    "GOOGLE_CLIENT_SECRET": { "description": "Google OAuth client secret, for Connect Gmail." },
+    "SESSION_SECRET": { "description": "Optional long random text so a restart doesn't sign everyone out." },
+    "EVENT_PITCH": { "description": "Optional: facts about your event that the AI may use." }
+  }
+}

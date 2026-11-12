@@ -20,8 +20,8 @@ import type {
 } from "./types";
 
 import { getToken, signOut } from "./auth";
+import { backendUrl } from "./backend";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export class ApiError extends Error {
   constructor(
@@ -58,7 +58,7 @@ function authHeaders(extra: Record<string, string> = {}): Record<string, string>
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(`${backendUrl()}${path}`, {
       ...init,
       headers: authHeaders(init.body ? { "Content-Type": "application/json" } : {}),
     });
@@ -181,7 +181,7 @@ export const api = {
     exportCsv: async (): Promise<Blob> => {
       let res: Response;
       try {
-        res = await fetch(`${API_BASE}/export.csv`, { headers: authHeaders() });
+        res = await fetch(`${backendUrl()}/export.csv`, { headers: authHeaders() });
       } catch {
         throw new ApiError(0, "Can't reach the server. Is the backend running?");
       }
