@@ -288,6 +288,18 @@ class EnrichApplyOut(BaseModel):
     skipped: list[str]
 
 
+class SearchIn(BaseModel):
+    query: str = Field(min_length=3, max_length=200)
+
+
+class SearchHitOut(BaseModel):
+    title: str
+    url: str
+    snippet: str
+    age: str | None
+    domain: str
+
+
 class VerifyIn(BaseModel):
     website: str | None = Field(default=None, max_length=300, description="Correct the address")
 

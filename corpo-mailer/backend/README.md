@@ -191,4 +191,11 @@ separate call (`.../apply` with `set_website` and chosen `emails`) that checks t
 only saves what it still shows, so nothing sent by a browser is trusted; inboxes already tracked
 are skipped, and an existing website is never overwritten.
 
+**Search the web** (`POST /discovery/search {"query": ...}`): needs `SEARCH_API_KEY` (a Brave Search
+API key; the free tier is enough). It returns *pages* (results from the past year, at most two per
+site, no social networks) for a person to pick, and saves and fetches nothing. The picked pages go
+through the sponsor-page extractor above, then verification. Search results are never trusted as
+facts and only the query you type leaves your machine. Without a key the endpoint answers with how
+to set one up and the rest of discovery works as normal.
+
 Nothing in discovery can send a message.

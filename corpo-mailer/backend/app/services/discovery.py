@@ -25,6 +25,7 @@ from app.models import Company, Contact, Prospect
 from app.models.entities import linkedin_people_search
 from app.models.enums import ProspectState, Verdict
 from app.providers.llm import LLM, LLMError
+from app.providers.search import SearchClient, SearchError
 from app.providers.web import FetchError, Page, PageFetcher, RobotsBlocked
 
 
@@ -255,6 +256,39 @@ def extract_sponsors(db: Session, fetcher: PageFetcher, url: str) -> dict:
         added.append(p)
     db.commit()
     return {"added": added, "skipped_duplicates": skipped, "found": len(seen)}
+
+
+# ------------------------------------------------------------------ search signals
+MAX_PER_DOMAIN = 2
+
+
+def find_sponsor_pages(search: SearchClient, query: str) -> list[dict]:
+    """Pages worth reading, from a web search. A human picks which; nothing is fetched here."""
+    try:
+        hits = search.search(query.strip(), count=20)
+    except SearchError as exc:
+        raise DiscoveryError(str(exc)) from None
+    out: list[dict] = []
+    per_domain: dict[str, int] = {}
+    seen: set[str] = set()
+    for h in hits:
+        host = (urlsplit(h.url).hostname or "").lower()
+        domain = base_domain(host) if "." in host else ""
+        if (
+            not domain
+            or domain in NOT_SPONSORS
+            or domain.replace(".", "").isdigit()
+            or h.url in seen
+        ):
+            continue
+        if per_domain.get(domain, 0) >= MAX_PER_DOMAIN:
+            continue
+        per_domain[domain] = per_domain.get(domain, 0) + 1
+        seen.add(h.url)
+        out.append(
+            {"title": h.title, "url": h.url, "snippet": h.snippet, "age": h.age, "domain": domain}
+        )
+    return out
 
 
 # ------------------------------------------------------------------ verifying

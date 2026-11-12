@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models import Company, Prospect
 from app.models.enums import ProspectState, Verdict
 from app.providers.llm import LLM, get_llm
+from app.providers.search import SearchClient, get_search
 from app.providers.web import PageFetcher, get_fetcher
 from app.schemas import api as s
 from app.services import discovery as svc
@@ -48,6 +49,15 @@ def suggest(
     """Ask the model for lookalike companies. They arrive unverified; nothing is trusted yet."""
     try:
         return svc.suggest(db, llm, settings, body.count, body.focus)
+    except svc.DiscoveryError as exc:
+        raise HTTPException(502, str(exc)) from None
+
+
+@router.post("/search", response_model=list[s.SearchHitOut])
+def search_pages(body: s.SearchIn, search: SearchClient = Depends(get_search)):
+    """Search the web for pages that list sponsors. Returns pages only; nothing is saved."""
+    try:
+        return svc.find_sponsor_pages(search, body.query)
     except svc.DiscoveryError as exc:
         raise HTTPException(502, str(exc)) from None
 

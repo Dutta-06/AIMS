@@ -7,6 +7,7 @@ import type {
   Enrichment,
   Prospect,
   ProspectState,
+  SearchHit,
   DraftKind,
   DraftStatus,
   ImportPreview,
@@ -123,6 +124,7 @@ export const api = {
         `/discovery/enrich/${companyId}/apply`,
         { method: "POST", ...json(b) },
       ),
+    search: (query: string) => request<SearchHit[]>("/discovery/search", { method: "POST", ...json({ query }) }),
     fromPage: (url: string) =>
       request<{ added: Prospect[]; skipped_duplicates: number; found: number }>("/discovery/from-page", {
         method: "POST",

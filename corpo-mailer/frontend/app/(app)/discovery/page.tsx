@@ -9,7 +9,7 @@ import { Button, Card, Empty, ErrorNote, Field, Input, Loading, PageHeader, Pill
 import { api } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
 import { errorMessage, useAction, useQuery } from "@/lib/hooks";
-import type { Prospect, ProspectState, Verdict } from "@/lib/types";
+import type { Prospect, ProspectState, SearchHit, Verdict } from "@/lib/types";
 
 const TABS: { value: ProspectState; label: string }[] = [
   { value: "new", label: "To review" },
@@ -198,7 +198,11 @@ export default function DiscoveryPage() {
   const [asking, setAsking] = useState(false);
   const [count, setCount] = useState("8");
   const [focus, setFocus] = useState("");
-  const [mode, setMode] = useState<"ideas" | "page">("ideas");
+  const [mode, setMode] = useState<"ideas" | "page" | "search">("ideas");
+  const [query, setQuery] = useState(`hackathon sponsors ${new Date().getFullYear()} students`);
+  const [hits, setHits] = useState<SearchHit[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const searching = useAction();
   const [pageUrl, setPageUrl] = useState("");
   const [progress, setProgress] = useState<{ done: number; total: number; name: string } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -215,6 +219,21 @@ export default function DiscoveryPage() {
         const r = await api.discovery.fromPage(pageUrl.trim());
         added = r.added;
         skipped = r.skipped_duplicates;
+      } else if (mode === "search") {
+        const urls = [...picked];
+        const byId = new Map<number, Prospect>();
+        skipped = 0;
+        for (const [i, u] of urls.entries()) {
+          setProgress({ done: i, total: urls.length, name: `Reading page ${i + 1} of ${urls.length}…` });
+          try {
+            const r = await api.discovery.fromPage(u);
+            r.added.forEach((p) => byId.set(p.id, p));
+            skipped += r.skipped_duplicates;
+          } catch (e) {
+            setErr(`Couldn't read ${u}: ${errorMessage(e)}`);
+          }
+        }
+        added = [...byId.values()];
       } else {
         setProgress({ done: 0, total: 0, name: "Asking the model for ideas…" });
         const r = await api.discovery.suggest({ count: Number(count) || 8, focus: focus.trim() || undefined });
@@ -222,7 +241,7 @@ export default function DiscoveryPage() {
         skipped = r.skipped_duplicates;
       }
       if (added.length === 0) {
-        toast(skipped ? "Nothing new: every company was already in your list" : mode === "page" ? "No companies found on that page" : "The model had no new ideas");
+        toast(skipped ? "Nothing new: every company was already in your list" : mode === "ideas" ? "The model had no new ideas" : "No companies found on those pages");
         return;
       }
       setTab("new");
@@ -270,7 +289,7 @@ export default function DiscoveryPage() {
             }}
           >
             <div role="tablist" aria-label="Where to look" className="inline-flex rounded-full border border-glass-border bg-glass p-1">
-              {([["ideas", "AI ideas"], ["page", "From a sponsor page"]] as const).map(([v, label]) => (
+              {([["ideas", "AI ideas"], ["page", "From a sponsor page"], ["search", "Search the web"]] as const).map(([v, label]) => (
                 <button key={v} type="button" role="tab" aria-selected={mode === v} onClick={() => setMode(v)} className={`h-8 rounded-full px-3.5 text-sm transition-colors ${mode === v ? "bg-glass-strong text-heading" : "text-body hover:text-heading"}`}>
                   {label}
                 </button>
@@ -288,16 +307,74 @@ export default function DiscoveryPage() {
                 </div>
                 <p className="text-xs text-body">New ideas are modelled on the companies already in your list. Each is then checked against its real website. Nothing is contacted.</p>
               </>
-            ) : (
+            ) : mode === "page" ? (
               <>
                 <Field label="Link to a page that lists sponsors">
                   <Input value={pageUrl} onChange={(e) => setPageUrl(e.target.value)} placeholder="https://some-hackathon.example/sponsors" maxLength={500} />
                 </Field>
                 <p className="text-xs text-body">Try another hackathon&apos;s sponsors page. I take the companies it links to (not its own pages or social links), then check each against its real website. Nothing is contacted.</p>
               </>
+            ) : (
+              <>
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <Field label="Search the web for pages that list sponsors">
+                      <Input value={query} onChange={(e) => setQuery(e.target.value)} maxLength={200} />
+                    </Field>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={searching.busy || query.trim().length < 3}
+                    onClick={async () => {
+                      setHits(null);
+                      setPicked(new Set());
+                      await searching.run(async () => setHits(await api.discovery.search(query.trim())));
+                    }}
+                  >
+                    {searching.busy ? "Searching…" : "Search"}
+                  </Button>
+                </div>
+                <ErrorNote message={searching.error} />
+                {hits && hits.length === 0 && <p className="text-sm text-body">No pages found. Try different words.</p>}
+                {hits && hits.length > 0 && (
+                  <ul className="max-h-80 space-y-2 overflow-y-auto" data-lenis-prevent>
+                    {hits.map((h) => (
+                      <li key={h.url} className="rounded-xl border border-hairline bg-white/[0.03] p-3">
+                        <label className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={picked.has(h.url)}
+                            onChange={(e) => {
+                              const next = new Set(picked);
+                              if (e.target.checked) next.add(h.url);
+                              else next.delete(h.url);
+                              setPicked(next);
+                            }}
+                            className="mt-1 h-4 w-4 shrink-0 accent-[var(--st-responded)]"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-heading">{h.title || h.domain}</span>
+                            {h.snippet && <span className="block text-xs text-body">{h.snippet}</span>}
+                            <span className="block text-xs text-faint">
+                              {h.domain}
+                              {h.age ? ` · ${h.age}` : ""}
+                            </span>
+                          </span>
+                        </label>
+                        <a href={h.url} target="_blank" rel="noopener noreferrer" className="ml-7 text-xs text-body hover:text-heading hover:underline">
+                          Open the page ↗
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="text-xs text-body">Only the words you type are sent to the search service. Tick the pages that really list sponsors; I take the companies they link to, then check each against its real website. Nothing is contacted.</p>
+              </>
             )}
             <div className="flex gap-2">
-              <Button type="submit" variant="primary" disabled={mode === "page" && pageUrl.trim().length < 4}>Find and check</Button>
+              <Button type="submit" variant="primary" disabled={(mode === "page" && pageUrl.trim().length < 4) || (mode === "search" && picked.size === 0)}>
+                {mode === "search" ? `Pull companies from ${picked.size} ${picked.size === 1 ? "page" : "pages"}` : "Find and check"}
+              </Button>
               <Button type="button" variant="ghost" onClick={() => setAsking(false)}>Cancel</Button>
             </div>
           </form>

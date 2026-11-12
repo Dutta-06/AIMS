@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     ]
     llm_timeout_seconds: float = 60
 
+    # Web search (Brave Search API, free tier). Optional: without a key, discovery from search is
+    # simply unavailable. Only the query you type is sent to the search service.
+    search_api_key: str = ""
+    search_base_url: str = "https://api.search.brave.com/res/v1/web/search"
+    search_timeout_seconds: float = 15
+
     # What the AI is allowed to say about the event. It is told to use nothing beyond this.
     event_name: str = "brAInwave 3"
     event_pitch: str = (

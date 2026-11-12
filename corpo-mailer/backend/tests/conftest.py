@@ -13,6 +13,7 @@ from app.main import app
 from app.providers.imap import Fetched, MailboxError, get_mailbox
 from app.providers.llm import LLM, LLMError, get_llm
 from app.providers.mail import MailError, get_mailer
+from app.providers.search import SearchError, SearchHit, get_search
 from app.providers.web import Page, get_fetcher
 
 
@@ -81,6 +82,21 @@ def page(url, text="", *, title="", status=200, final_url=None, links=(), emails
     )
 
 
+class FakeSearch:
+    """A pretend search engine: put hits in `hits`, or set `error` to make it fail."""
+
+    def __init__(self) -> None:
+        self.hits: list[SearchHit] = []
+        self.error: str | None = None
+        self.queries: list[str] = []
+
+    def search(self, query, count=10):
+        self.queries.append(query)
+        if self.error:
+            raise SearchError(self.error)
+        return self.hits
+
+
 class FakeMailbox:
     """Stands in for IMAP. Put messages in `inbox`; `fetch` hands back those past the cursor."""
 
@@ -101,6 +117,11 @@ class FakeMailbox:
 @pytest.fixture
 def mailer():
     return FakeMailer()
+
+
+@pytest.fixture
+def search():
+    return FakeSearch()
 
 
 @pytest.fixture
@@ -147,12 +168,13 @@ def db_session():
 
 
 @pytest.fixture
-def client(db_session, mailer, llm, mailbox, fetcher, imap_settings):
+def client(db_session, mailer, llm, mailbox, fetcher, search, imap_settings):
     app.dependency_overrides[get_db] = lambda: db_session
     app.dependency_overrides[get_mailer] = lambda: mailer
     app.dependency_overrides[get_llm] = lambda: llm
     app.dependency_overrides[get_mailbox] = lambda: mailbox
     app.dependency_overrides[get_fetcher] = lambda: fetcher
+    app.dependency_overrides[get_search] = lambda: search
     app.dependency_overrides[get_settings] = lambda: imap_settings
     with TestClient(app) as c:
         c.headers["X-Corpo-Mailer"] = "1"  # what the real frontend sends on every request

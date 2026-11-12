@@ -141,6 +141,8 @@ export type Enrichment = {
   checked_at: string;
 };
 
+export type SearchHit = { title: string; url: string; snippet: string; age: string | null; domain: string };
+
 export type Prospect = {
   id: number;
   name: string;
