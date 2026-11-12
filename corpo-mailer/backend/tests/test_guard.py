@@ -1,4 +1,4 @@
-"""There is no login, so these requests are the protection: who may change things."""
+"""Where a request comes from, and the header it must carry (the password has its own tests)."""
 
 API = "/api/v1"
 ORIGIN = "http://localhost:3000"
@@ -67,7 +67,3 @@ def test_preflight_from_the_frontend_is_allowed(client):
         },
     )
     assert r.headers.get("access-control-allow-origin") == ORIGIN
-
-
-def test_there_is_no_login_route_any_more(client):
-    assert client.post(f"{API}/auth/login", json={"password": "x", "name": "y"}).status_code == 404

@@ -21,6 +21,7 @@ import { snap, soft } from "@/components/motion/springs";
 import { Card, ChannelPills, Pill } from "@/components/ui";
 import { STATUS_COLOR, STATUS_LABEL, contactLabel, daysAgo } from "@/lib/format";
 import { STATUSES, type Contact, type Status } from "@/lib/types";
+import { leadHref } from "@/lib/routes";
 
 // The column under the pointer wins; if the pointer is between columns, fall back to overlap.
 const byPointer: CollisionDetection = (args) => {
@@ -38,7 +39,7 @@ function CardBody({ lead, lifted, onMove }: { lead: Contact; lifted?: boolean; o
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <Link href={`/leads/${lead.id}`} draggable={false} className="block truncate font-medium text-heading hover:underline">
+          <Link href={leadHref(lead.id)} draggable={false} className="block truncate font-medium text-heading hover:underline">
             {who}
           </Link>
           <p className="truncate text-[0.8rem] text-body">

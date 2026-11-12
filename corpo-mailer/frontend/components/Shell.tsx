@@ -9,6 +9,7 @@ import CommandPalette from "@/components/CommandPalette";
 import Reveal from "@/components/motion/Reveal";
 import { snap, soft } from "@/components/motion/springs";
 import { api } from "@/lib/api";
+import { signOut, useSignedIn } from "@/lib/auth";
 import { useQuery } from "@/lib/hooks";
 
 const NAV = [
@@ -59,6 +60,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const reduce = useReducedMotion();
   const count = useReviewCount(pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Only show Sign out when this browser actually holds a sign-in (a backend with no password has none).
+  const signedIn = useSignedIn();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -98,6 +101,15 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           >
             ⌘K
           </button>
+          {signedIn && (
+            <button
+              type="button"
+              onClick={signOut}
+              className="flex h-full items-center rounded-full px-3 text-[0.82rem] text-body transition-colors hover:bg-glass hover:text-heading"
+            >
+              Sign out
+            </button>
+          )}
         </div>
       </Reveal>
 

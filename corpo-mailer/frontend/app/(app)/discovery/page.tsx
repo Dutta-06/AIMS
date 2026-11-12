@@ -10,6 +10,7 @@ import { api } from "@/lib/api";
 import { fmtDate } from "@/lib/format";
 import { errorMessage, useAction, useQuery } from "@/lib/hooks";
 import type { Prospect, ProspectState, SearchHit, Verdict } from "@/lib/types";
+import { companyHref } from "@/lib/routes";
 
 const TABS: { value: ProspectState; label: string }[] = [
   { value: "new", label: "To review" },
@@ -139,7 +140,7 @@ function ProspectCard({ p, tab, onChanged, checking }: { p: Prospect; tab: Prosp
           </div>
         )}
         {tab === "accepted" && p.company_id && (
-          <Link href={`/companies/${p.company_id}`} className="text-sm text-body hover:text-heading hover:underline">
+          <Link href={companyHref(p.company_id)} className="text-sm text-body hover:text-heading hover:underline">
             Open company →
           </Link>
         )}

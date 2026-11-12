@@ -1,5 +1,10 @@
+import AuthGate from "@/components/AuthGate";
 import Shell from "@/components/Shell";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return <Shell>{children}</Shell>;
+  return (
+    <AuthGate>
+      <Shell>{children}</Shell>
+    </AuthGate>
+  );
 }

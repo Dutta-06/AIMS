@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { STATUS_BAR, STATUS_COLOR, STATUS_LABEL, contactLabel, daysAgo, fmtDate } from "@/lib/format";
 import { useQuery } from "@/lib/hooks";
 import { STATUSES, type Contact, type Status } from "@/lib/types";
+import { leadHref } from "@/lib/routes";
 
 async function load() {
   const [dash, replyStatus] = await Promise.all([api.dashboard(), api.replies.status()]);
@@ -44,7 +45,7 @@ function Tile({ status, value, total, index }: { status: Status; value: number; 
 function LeadRow({ lead, note }: { lead: Contact; note: string }) {
   return (
     <li>
-      <Link href={`/leads/${lead.id}`} className="group flex items-center justify-between gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-glass">
+      <Link href={leadHref(lead.id)} className="group flex items-center justify-between gap-3 rounded-xl px-3 py-3 transition-colors hover:bg-glass">
         <div className="min-w-0">
           <p className="truncate font-medium text-heading">
             {contactLabel(lead)} <span className="font-normal text-body">· {lead.company_name}</span>

@@ -29,7 +29,7 @@ LinkedIn, Discord and/or Personal (multi-select).
 
 ## Who's using it?
 
-There are no accounts and no names: leads aren't assigned to people. Approvals are recorded against
+There is one shared team password (checked by the backend) and no individual accounts or names: leads aren't assigned to people. Approvals are recorded against
 the connected Gmail account (one shared app-password login; there is no per-person sign-in).
 
 ## Sending
@@ -56,3 +56,11 @@ versions** keep your wording safe. A revision clears any approval, so you read i
 On a lead, "Write a message" has an **Email** or **LinkedIn note** switch. A LinkedIn note is short
 (300 characters, with a counter), has **Copy note** and **I sent it on LinkedIn** buttons, and is
 never sent from here.
+
+## Static export and GitHub Pages
+
+The site is built as plain static files (`output: "export"`) so it can be hosted on GitHub Pages; see
+[`../docs/HOSTING.md`](../docs/HOSTING.md). Because of that, detail pages take their id from the
+query string (`/leads/detail?id=3`, `/companies/detail?id=3`), and the CSV export is fetched with the
+sign-in token instead of being a plain link. `NEXT_PUBLIC_BASE_PATH` (the `/<repo>` prefix) and
+`NEXT_PUBLIC_API_URL` are build-time settings.

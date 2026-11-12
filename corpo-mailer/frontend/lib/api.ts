@@ -18,7 +18,9 @@ import type {
   SyncResult,
 } from "./types";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+import { getToken, signOut } from "./auth";
+
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export class ApiError extends Error {
   constructor(
@@ -41,21 +43,29 @@ function detailMessage(body: unknown, fallback: string): string {
   return fallback;
 }
 
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const token = getToken();
+  return {
+    ...extra,
+    // The backend refuses changes without this (it is what stops other websites from
+    // making your browser trigger a send).
+    "X-Corpo-Mailer": "1",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
-      headers: {
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        // The backend refuses changes without this (it is what stops other websites from
-        // making your browser trigger a send).
-        "X-Corpo-Mailer": "1",
-      },
+      headers: authHeaders(init.body ? { "Content-Type": "application/json" } : {}),
     });
   } catch {
     throw new ApiError(0, "Can't reach the server. Is the backend running?");
   }
+  // A 401 on a normal call means the sign-in ran out (or the password changed): back to sign-in.
+  if (res.status === 401 && !path.startsWith("/auth/")) signOut();
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new ApiError(res.status, detailMessage(body, `Request failed (${res.status})`));
@@ -166,6 +176,23 @@ export const api = {
       request<ImportPreview>("/import/preview", { method: "POST", ...json({ csv, ...o }) }),
     commit: (csv: string, o: { overwrite: boolean; infer_status: boolean }) =>
       request<ImportPreview["summary"]>("/import/commit", { method: "POST", ...json({ csv, ...o }) }),
-    exportUrl: `${API_BASE}/export.csv`,
+    /** The file needs the sign-in token, so it can't be a plain link: fetch it, then save it. */
+    exportCsv: async (): Promise<Blob> => {
+      let res: Response;
+      try {
+        res = await fetch(`${API_BASE}/export.csv`, { headers: authHeaders() });
+      } catch {
+        throw new ApiError(0, "Can't reach the server. Is the backend running?");
+      }
+      if (res.status === 401) signOut();
+      if (!res.ok) throw new ApiError(res.status, `Export failed (${res.status})`);
+      return res.blob();
+    },
+  },
+
+  auth: {
+    status: () => request<{ required: boolean; authenticated: boolean }>("/auth/status"),
+    login: (password: string) =>
+      request<{ token: string; expires_at: number }>("/auth/login", { method: "POST", ...json({ password }) }),
   },
 };

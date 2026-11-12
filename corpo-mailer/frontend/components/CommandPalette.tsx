@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { contactLabel } from "@/lib/format";
 import type { Company, Contact } from "@/lib/types";
 import { snap } from "./motion/springs";
+import { leadHref, companyHref } from "@/lib/routes";
 
 const PAGES = [
   { label: "Dashboard", href: "/" },
@@ -64,8 +65,8 @@ export default function CommandPalette({ onClose }: { onClose: () => void }) {
     }));
     const found: Item[] = needle
       ? [
-          ...leads.map((c): Item => ({ kind: "lead", key: `lead:${c.id}`, label: contactLabel(c), sub: c.company_name, href: `/leads/${c.id}` })),
-          ...companies.map((c): Item => ({ kind: "company", key: `co:${c.id}`, label: c.name, href: `/companies/${c.id}` })),
+          ...leads.map((c): Item => ({ kind: "lead", key: `lead:${c.id}`, label: contactLabel(c), sub: c.company_name, href: leadHref(c.id) })),
+          ...companies.map((c): Item => ({ kind: "company", key: `co:${c.id}`, label: c.name, href: companyHref(c.id) })),
         ]
       : [];
     return [...pages, ...found];

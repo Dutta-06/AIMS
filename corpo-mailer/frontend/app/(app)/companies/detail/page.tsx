@@ -2,8 +2,8 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import EnrichPanel from "@/components/EnrichPanel";
 import { soft } from "@/components/motion/springs";
@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import { contactLabel } from "@/lib/format";
 import { useAction, useQuery } from "@/lib/hooks";
 import type { Company, Contact } from "@/lib/types";
+import { leadHref } from "@/lib/routes";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -91,7 +92,7 @@ function ContactCard({
     <Card glass className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="flex items-center gap-2 font-medium text-heading">
-          <Link href={`/leads/${contact.id}`} className="hover:underline">
+          <Link href={leadHref(contact.id)} className="hover:underline">
             {contactLabel(contact)}
           </Link>
           {contact.do_not_contact && <Pill tone="rose">Do not contact</Pill>}
@@ -127,8 +128,7 @@ function ContactCard({
   );
 }
 
-export default function CompanyPage() {
-  const id = Number(useParams<{ id: string }>().id);
+function CompanyView({ id }: { id: number }) {
   const router = useRouter();
   const toast = useToast();
   const reduce = useReducedMotion();
@@ -302,5 +302,20 @@ export default function CompanyPage() {
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+function CompanyInner() {
+  const raw = useSearchParams().get("id");
+  const id = Number(raw);
+  if (!raw || !Number.isInteger(id) || id < 1) return <ErrorNote message="No company chosen. Open one from the list." />;
+  return <CompanyView id={id} />;
+}
+
+export default function CompanyPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <CompanyInner />
+    </Suspense>
   );
 }

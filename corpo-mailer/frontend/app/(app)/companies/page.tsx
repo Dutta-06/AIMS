@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { STATUS_BAR, STATUS_LABEL } from "@/lib/format";
 import { STATUSES } from "@/lib/types";
 import { useAction, useQuery } from "@/lib/hooks";
+import { companyHref } from "@/lib/routes";
 
 function AddCompany({ onDone, onClose }: { onDone: () => void; onClose: () => void }) {
   const toast = useToast();
@@ -135,7 +136,7 @@ export default function CompaniesPage() {
                   transition={{ ...soft, delay: Math.min(i, 20) * 0.03 }}
                 >
                   <Link
-                    href={`/companies/${c.id}`}
+                    href={companyHref(c.id)}
                     className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 rounded-xl px-4 py-3 transition-colors hover:bg-glass focus-visible:bg-glass focus-visible:outline-none md:grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_5rem_9rem_1.5rem]"
                   >
                     <span className="truncate font-medium text-heading">{c.name}</span>

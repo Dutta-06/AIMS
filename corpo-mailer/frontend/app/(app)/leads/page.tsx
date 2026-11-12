@@ -16,6 +16,7 @@ import { api, type ContactPatch } from "@/lib/api";
 import { STATUS_COLOR, STATUS_LABEL, contactLabel, daysAgo } from "@/lib/format";
 import { errorMessage, useQuery } from "@/lib/hooks";
 import { STATUSES, type Contact, type Status } from "@/lib/types";
+import { leadHref, companyHref } from "@/lib/routes";
 
 
 /** A text cell that saves when you leave it (Enter saves, Esc puts back what was there). */
@@ -57,6 +58,7 @@ function Leads() {
   const params = useSearchParams();
   const toast = useToast();
   const signal = useSignal();
+  const [exporting, setExporting] = useState(false);
   const [view, setView] = useState<"table" | "board">("table");
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<Status | "">(() => {
@@ -110,9 +112,26 @@ function Leads() {
             <Link href="/leads/import" className="inline-flex h-10 items-center rounded-full border border-glass-border bg-glass px-[1.125rem] text-[0.9rem] font-medium text-heading backdrop-blur-xl transition-colors hover:bg-glass-strong">
               Import CSV
             </Link>
-            <a href={api.import.exportUrl} download className="inline-flex h-10 items-center rounded-full border border-glass-border bg-glass px-[1.125rem] text-[0.9rem] font-medium text-heading backdrop-blur-xl transition-colors hover:bg-glass-strong">
-              Export
-            </a>
+            <Button
+              disabled={exporting}
+              onClick={async () => {
+                setExporting(true);
+                try {
+                  const url = URL.createObjectURL(await api.import.exportCsv());
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = "corpo-mailer-leads.csv";
+                  link.click();
+                  URL.revokeObjectURL(url);
+                } catch (e) {
+                  toast(e instanceof Error ? e.message : "Export failed", "error");
+                } finally {
+                  setExporting(false);
+                }
+              }}
+            >
+              {exporting ? "Exporting…" : "Export"}
+            </Button>
             <Button variant="primary" onClick={() => setAdding(true)}>
               Add lead
             </Button>
@@ -207,12 +226,12 @@ function Leads() {
                   return (
                     <tr key={l.id} className="align-middle transition-colors hover:bg-foreground/[0.03]">
                       <td className="w-[10rem] py-2 pl-5 pr-3">
-                        <Link href={`/companies/${l.company_id}`} className="block max-w-[9rem] truncate text-body hover:text-heading hover:underline">
+                        <Link href={companyHref(l.company_id)} className="block max-w-[9rem] truncate text-body hover:text-heading hover:underline">
                           {l.company_name}
                         </Link>
                       </td>
                       <td className="w-[15rem] px-3 py-2">
-                        <Link href={`/leads/${l.id}`} className="flex items-center gap-2 font-medium text-heading hover:underline">
+                        <Link href={leadHref(l.id)} className="flex items-center gap-2 font-medium text-heading hover:underline">
                           <span className="truncate">{contactLabel(l)}</span>
                           {l.reply_unread && <Pill tone="green">New reply</Pill>}
                           {l.do_not_contact && <Pill tone="rose">Don&apos;t contact</Pill>}

@@ -2,8 +2,8 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import DraftCard from "@/components/DraftCard";
 import { snap, soft } from "@/components/motion/springs";
 import WordReveal from "@/components/motion/WordReveal";
@@ -28,6 +28,7 @@ import { api } from "@/lib/api";
 import { CHANNEL_LABEL, contactLabel, fmtDateTime, fromLocalInput, toLocalInput } from "@/lib/format";
 import { useAction, useQuery } from "@/lib/hooks";
 import { CHANNELS, type Channel, type Contact, type DraftKind, type Interaction, type InteractionType, type Status } from "@/lib/types";
+import { companyHref } from "@/lib/routes";
 
 const TYPE_LABEL: Record<InteractionType, string> = {
   email_sent: "Email sent",
@@ -330,8 +331,7 @@ function TimelineEntry({ item, last }: { item: Interaction; last: boolean }) {
 
 /* ---------------------------------------------------------------- page */
 
-export default function LeadPage() {
-  const id = Number(useParams<{ id: string }>().id);
+function LeadView({ id }: { id: number }) {
   const { data, error, loading, reload } = useQuery(`lead:${id}`, async () => {
     const lead = await api.contacts.get(id);
     const [interactions, drafts] = await Promise.all([
@@ -359,7 +359,7 @@ export default function LeadPage() {
           <WordReveal as="h1" text={contactLabel(lead)} className="text-[2.4rem] font-medium leading-[1.1] tracking-[-0.02em] text-heading" />
           <p className="mt-2 text-[0.95rem] text-body">
             {lead.role ? `${lead.role} at ` : ""}
-            <Link href={`/companies/${lead.company_id}`} className="text-heading hover:underline">
+            <Link href={companyHref(lead.company_id)} className="text-heading hover:underline">
               {lead.company_name}
             </Link>
             {lead.linkedin && (
@@ -425,5 +425,20 @@ export default function LeadPage() {
         </aside>
       </div>
     </>
+  );
+}
+
+function LeadInner() {
+  const raw = useSearchParams().get("id");
+  const id = Number(raw);
+  if (!raw || !Number.isInteger(id) || id < 1) return <ErrorNote message="No lead chosen. Open one from the list." />;
+  return <LeadView id={id} />;
+}
+
+export default function LeadPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <LeadInner />
+    </Suspense>
   );
 }

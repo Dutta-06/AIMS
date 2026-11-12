@@ -1,0 +1,61 @@
+# Publishes the Corpo Mailer website (corpo-mailer/frontend) to GitHub Pages.
+#
+# The site is only the interface: plain static files with no data and no secrets. The backend, the
+# database and the Gmail login stay on your own computer, and the backend checks the password.
+# Setup steps are in corpo-mailer/docs/HOSTING.md.
+name: Corpo Mailer website (GitHub Pages)
+
+on:
+  push:
+    branches: [main, corpo-mailer]
+    paths:
+      - "corpo-mailer/frontend/**"
+      - ".github/workflows/corpo-mailer-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: corpo-mailer/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: corpo-mailer/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build
+        env:
+          # The site is served from https://<user>.github.io/<repo>/
+          NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+          # Where the backend is. Defaults to http://localhost:8000/api/v1 (your own computer);
+          # override with a repository variable named CORPO_API_URL if you ever change that.
+          NEXT_PUBLIC_API_URL: ${{ vars.CORPO_API_URL }}
+      - run: touch out/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: corpo-mailer/frontend/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

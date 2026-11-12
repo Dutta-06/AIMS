@@ -12,6 +12,15 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./corpo_mailer.db"
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # One shared password for the whole team (there are no individual accounts). When set, every
+    # API request except signing in needs a token from POST /auth/login. Leave empty only while
+    # the backend is reachable from your own computer alone.
+    app_password: str = ""
+    session_hours: int = 12
+    # Signs session tokens. If empty, a random one is made at startup, so restarting the backend
+    # signs everyone out. Changing app_password also signs everyone out.
+    session_secret: str = ""
+
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
     smtp_user: str = ""

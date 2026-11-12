@@ -52,7 +52,9 @@ There are no accounts or passwords. Instead:
 * Every state-changing request must come from an allowed origin (`CORS_ORIGINS`) **and** carry an
   `X-Corpo-Mailer: 1` header. A website you happen to visit can make your browser send a bare
   `POST /drafts/1/send` to `localhost`; the missing header (and the foreign origin) get it refused.
-* There is no "who is logged in" and leads aren't assigned to people. Approving a draft records
+* **One shared password** (`APP_PASSWORD`) guards the whole API: sign in with `POST /auth/login`, send
+  the token as `Authorization: Bearer ...`. `GET /auth/status` says whether a password is needed. There is
+  still no "who is logged in" (no individual accounts), and leads aren't assigned to people. Approving a draft records
   the connected Gmail account (`SMTP_USER`) as the approver; any name sent in the request is ignored.
   (The team uses a Gmail app password, not OAuth sign-in, so there is one shared identity.)
 
