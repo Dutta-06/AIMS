@@ -5,6 +5,7 @@ import type { Gis, KeyValueStore } from "./auth";
 import { google } from "./api";
 import { DriveStore } from "./drive";
 import { buildRaw, encodeWords, GmailApi, oneLine } from "./gmail";
+import { pickFile } from "./picker";
 
 // ------------------------------------------------------------------ fakes
 type Req = { prompt?: string; hint?: string };
@@ -84,7 +85,7 @@ describe("signing in with Google", () => {
   it("asks for exactly the permissions the app uses, in one go, with the account chooser", async () => {
     const t = await auth.signIn();
     expect(gis.requests).toEqual([{ prompt: "select_account" }]);
-    expect(SCOPES).toEqual(["openid", "email", "https://www.googleapis.com/auth/drive.appdata", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"]);
+    expect(SCOPES).toEqual(["openid", "email", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly"]);
     expect(t).toEqual({ access_token: "tok-1", expires_at: now + 3_600_000, email: "team@gmail.com" });
     expect(bearer(calls[0])).toBe("Bearer tok-1"); // asked Google who it is, with the new token
   });
@@ -245,17 +246,12 @@ describe("Google Drive storage", () => {
   });
   const drive = () => new DriveStore(auth, fakeFetch);
 
-  it("looks only in the app's private folder, for its own file", async () => {
-    on(/drive\/v3\/files\?/, () => json({ files: [{ id: "f1", modifiedTime: "2026-03-10T10:00:00Z" }] }));
-    expect(await drive().find()).toEqual({ id: "f1", modifiedTime: "2026-03-10T10:00:00Z" });
+  it("asks for a file's version and name by id (nothing else in the Drive)", async () => {
+    on(/drive\/v3\/files\/f1\?fields=/, () => json({ id: "f1", name: "Shared", modifiedTime: "t", version: "7" }));
+    expect(await drive().meta("f1")).toEqual({ id: "f1", name: "Shared", modifiedTime: "t", version: "7" });
     const url = decodeURIComponent(calls[0].url);
-    expect(url).toContain("spaces=appDataFolder");
-    expect(url).toContain("name='corpo-mailer-data.json'");
-  });
-
-  it("reports that there is no file yet", async () => {
-    on(/drive\/v3\/files\?/, () => json({ files: [] }));
-    expect(await drive().find()).toBeNull();
+    expect(url).toContain("fields=id,name,modifiedTime,version");
+    expect(url).not.toContain("q=");
   });
 
   it("reads the file's text", async () => {
@@ -263,19 +259,40 @@ describe("Google Drive storage", () => {
     expect(await drive().read("f1")).toBe('{"a":1}');
   });
 
-  it("creates the file in the private folder with the data in it", async () => {
-    on(/upload\/drive\/v3\/files\?uploadType=multipart/, () => json({ id: "new", modifiedTime: "t" }));
-    expect(await drive().create('{"hello":"wörld"}')).toEqual({ id: "new", modifiedTime: "t" });
+  it("creates a normal, shareable file (not in a hidden folder) with the data in it", async () => {
+    on(/upload\/drive\/v3\/files\?uploadType=multipart/, () => json({ id: "new", modifiedTime: "t", version: "1" }));
+    expect(await drive().create("Shared", '{"hello":"wörld"}')).toEqual({ id: "new", modifiedTime: "t", version: "1" });
     const body = String(calls[0].init.body);
-    expect(body).toContain('"parents":["appDataFolder"]');
+    expect(body).not.toContain("appDataFolder");
+    expect(body).toContain('"name":"Shared"');
     expect(body).toContain('{"hello":"wörld"}');
     expect((calls[0].init.headers as Record<string, string>)["Content-Type"]).toMatch(/^multipart\/related; boundary=/);
   });
 
   it("updates the file in place", async () => {
-    on(/upload\/drive\/v3\/files\/f1/, () => json({ id: "f1", modifiedTime: "t2" }));
-    await drive().update("f1", '{"b":2}');
+    on(/upload\/drive\/v3\/files\/f1/, () => json({ id: "f1", modifiedTime: "t2", version: "2" }));
+    expect((await drive().update("f1", '{"b":2}')).version).toBe("2");
     expect([calls[0].init.method, calls[0].init.body]).toEqual(["PATCH", '{"b":2}']);
+  });
+
+  it("shares with a teammate as an editor, by email", async () => {
+    on(/files\/f1\/permissions/, () => json({ id: "p1" }));
+    await drive().share("f1", "ben@gmail.com");
+    expect(calls[0].init.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ type: "user", role: "writer", emailAddress: "ben@gmail.com" });
+  });
+
+  it("lists who can edit, people only", async () => {
+    on(/files\/f1\/permissions/, () =>
+      json({ permissions: [{ emailAddress: "Ann@Gmail.com", displayName: "Ann", role: "owner", type: "user" }, { role: "reader", type: "anyone" }, { emailAddress: "g@x.com", role: "writer", type: "group" }] }),
+    );
+    expect(await drive().collaborators("f1")).toEqual([{ email: "ann@gmail.com", name: "Ann", role: "owner" }]);
+  });
+
+  it("reports a file that is gone or not shared as an error with its status", async () => {
+    on(/files\/f1\?fields=/, () => json({ error: { message: "File not found: f1." } }, 404));
+    const e = (await drive().meta("f1").catch((x) => x)) as ApiError;
+    expect(e.status).toBe(404);
   });
 });
 
@@ -385,5 +402,40 @@ describe("the Gmail API", () => {
     on(/messages\?q=/, () => json({ messages: Array.from({ length: 130 }, (_, i) => ({ id: `m${i}` })), nextPageToken: "more" })); // 3 pages = 390, more than the cap
     on(/messages\/m\d+\?format=full/, (url) => json({ id: url.match(/messages\/(m\d+)\?/)![1], payload: { headers: [] } }));
     expect(await gmail.fetch({ sinceMs: 0, skipIds: new Set() })).toHaveLength(300);
+  });
+});
+
+// ------------------------------------------------------------------ the file picker
+describe("choosing the shared file", () => {
+  const cfg = { apiKey: "key-1", appId: "123456" };
+  const fakePicker = (result: { action: string; docs?: { id: string; name: string }[] }) => {
+    const seen: { token: string; apiKey: string; appId: string }[] = [];
+    return {
+      seen,
+      load: async () => ({
+        show: (o: { token: string; apiKey: string; appId: string; onResult: (r: typeof result) => void }) => {
+          seen.push({ token: o.token, apiKey: o.apiKey, appId: o.appId });
+          o.onResult(result);
+        },
+      }),
+    };
+  };
+
+  it("returns the file the person picked, using their sign-in and the configured key", async () => {
+    await auth.signIn();
+    const p = fakePicker({ action: "picked", docs: [{ id: "f9", name: "Corpo Mailer shared data" }] });
+    expect(await pickFile(auth, cfg, p.load)).toEqual({ id: "f9", name: "Corpo Mailer shared data" });
+    expect(p.seen[0]).toMatchObject({ apiKey: "key-1", appId: "123456", token: expect.stringMatching(/^tok-/) });
+  });
+
+  it("returns null when the person closes it", async () => {
+    await auth.signIn();
+    expect(await pickFile(auth, cfg, fakePicker({ action: "cancel" }).load)).toBeNull();
+  });
+
+  it("says what is missing if the API key or project number isn't set", async () => {
+    await auth.signIn();
+    const e = (await pickFile(auth, { apiKey: "", appId: "1" }, fakePicker({ action: "cancel" }).load).catch((x) => x)) as ApiError;
+    expect([e.status, e.message]).toEqual([409, expect.stringMatching(/API key and project number/)]);
   });
 });

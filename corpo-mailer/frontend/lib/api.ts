@@ -1,6 +1,6 @@
 /**
  * What the screens call. Everything runs in this browser (see lib/engine): the data is kept in the
- * signed-in person's own Google Drive, and email goes through their own Gmail. There is no server.
+ * signed-in person's team workspace (one shared Google Drive file), and email goes through their own Gmail. There is no server.
  */
 import { app } from "./engine/app";
 import type { CompanyInput, ContactInput, ContactPatch, InteractionInput } from "./engine/core";

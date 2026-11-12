@@ -21,26 +21,33 @@ npm test                        # vitest: the engine (leads, import, drafts, app
 | `/leads/import` | Import a CSV with a preview of exactly what will happen before anything is saved |
 | `/companies`, `/companies/detail?id=` | Companies and their people |
 | `/drafts` | Every email waiting for review, plus sent history |
-| `/settings` | Account and save status, AI key and models, event wording, backup download / restore |
+| `/settings` | Account and save status, AI keys and models, event wording and the team brief, **Team workspace** (who has access, add a teammate), backup download / restore |
 
 ## How it works
 
 ```
 lib/engine/        the app itself, no UI: core (leads), importer, drafts + approval gate, replies,
                    persistence (debounced Drive saves), app (singleton the UI reads)
-lib/engine/google/ Google sign-in (token model), Drive app-data file, Gmail send/read
+lib/engine/google/ Google sign-in (token model), shared Drive file, file picker, Gmail send/read
 lib/api.ts         thin facade the pages call
 ```
 
-* Data is one JSON file, `corpo-mailer-data.json`, in Drive's hidden app-data folder. Edits are saved
-  after a short pause; a spare copy is kept in the browser until Drive confirms, and nothing is
-  overwritten if the file can't be read.
+* Data is one JSON file, *Corpo Mailer shared data*, in Google Drive, shared by the team (the app has
+  only the narrow `drive.file` permission; teammates open it through Google's file picker). A save
+  never overwrites: it reads the file, merges this person's changes onto it (`lib/engine/merge.ts`:
+  per-record, later edit wins, deletions kept as tombstones, a sent email stays sent), then writes.
+  A background check (about every 30 s) brings in teammates' changes. A spare copy is kept in the
+  browser until Drive confirms, and nothing is overwritten if the file can't be read.
+* Ids come from the clock plus a random part, so two people adding leads at once can't collide.
+  Each person's mailbox position is stored under their email in the file.
 * **Sending** needs Approve (a hash of recipient, subject and body is recorded) then press-and-hold
-  Send (or a confirm dialog for keyboard use). Editing after approval voids it. A send that was
-  interrupted is recovered rather than repeated.
+  Send (or a confirm dialog for keyboard use). Editing after approval voids it. Before an email goes
+  out the sender claims the draft in the shared file and looks once more for a teammate's claim, so
+  two people pressing Send together send one email. A send that was interrupted is recovered rather
+  than repeated.
 * **Replies** are matched by Message-ID / Gmail thread (sender address as fallback); auto-replies and
   your own mail are ignored; bounces mark the lead do-not-contact.
-* Browser settings (`corpo.googleClientId`, `corpo.openrouterKey`, `corpo.models`) live in local storage.
+* Browser settings (`corpo.googleClientId`, `corpo.googleApiKey`, `corpo.googleAppId`, `corpo.openrouterKey` (one or several keys, one per line), `corpo.models`, `corpo.workspace.<email>`) live in local storage.
 
 ## What the AI is told
 

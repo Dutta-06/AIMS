@@ -25,6 +25,11 @@ export type DraftRow = {
   sent_at: string | null;
   last_error: string | null;
   created_at: string;
+  /** Set when saving to the shared file; the newer edit of the same record wins. */
+  updated_at?: string;
+  /** Who is sending it right now (so two people can't send the same email). */
+  claimed_by?: string | null;
+  claimed_at?: string | null;
   history: Revision[];
 };
 
@@ -49,7 +54,7 @@ export type EventSettings = {
   stale_after_days: number;
 };
 
-/** Everything the app remembers. Saved as one JSON file in the person's own Google Drive. */
+/** Everything the app remembers. Saved as one JSON file in Google Drive, shared by the team. */
 export type DB = {
   version: 1;
   seq: { company: number; contact: number; interaction: number; draft: number };
@@ -57,8 +62,20 @@ export type DB = {
   contacts: ContactRow[];
   interactions: InteractionRow[];
   drafts: DraftRow[];
+  /** This person's mailbox position (taken from, and saved into, `mailboxes`). */
   mailbox: MailboxState;
+  /** Every person's mailbox position, by email, in the shared file. */
+  mailboxes: Record<string, MailboxState>;
+  /** Things deleted, so a teammate's older copy doesn't bring them back. id -> when. */
+  tombstones: Tombstones;
   settings: EventSettings;
+};
+
+export type Tombstones = {
+  company: Record<string, string>;
+  contact: Record<string, string>;
+  draft: Record<string, string>;
+  interaction: Record<string, string>;
 };
 
 export const DEFAULT_SETTINGS: EventSettings = {
@@ -82,6 +99,8 @@ export function emptyDb(): DB {
     interactions: [],
     drafts: [],
     mailbox: { last_sync_at: null, last_error: null, synced_until: null, processed: [] },
+    mailboxes: {},
+    tombstones: { company: {}, contact: {}, draft: {}, interaction: {} },
     settings: { ...DEFAULT_SETTINGS },
   };
 }
@@ -98,6 +117,8 @@ export function normaliseDb(raw: unknown): DB {
     interactions: r.interactions ?? [],
     drafts: r.drafts ?? [],
     mailbox: { ...base.mailbox, ...(r.mailbox ?? {}) },
+    mailboxes: r.mailboxes ?? {},
+    tombstones: { ...base.tombstones, ...(r.tombstones ?? {}) },
     settings: { ...base.settings, ...(r.settings ?? {}) },
   };
 }

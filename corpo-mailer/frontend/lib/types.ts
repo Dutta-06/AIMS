@@ -12,6 +12,8 @@ export type Company = {
   source: string | null;
   notes: string | null;
   created_at: string;
+  /** Set when saving to the shared file; the newer edit of the same record wins. */
+  updated_at?: string;
 };
 
 /** A lead: one person (or generic inbox) at a company, and where outreach to them stands. */

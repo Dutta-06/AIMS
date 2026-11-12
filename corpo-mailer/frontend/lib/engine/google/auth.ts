@@ -3,7 +3,7 @@
  *
  * We use Google's own sign-in script ("Google Identity Services", token model). It needs only a
  * public client ID: there is no client secret and no server. One consent covers everything the app
- * uses: who you are, a private app-data file in your Drive (where your leads are saved), and
+ * uses: who you are, the shared workspace file in Drive (where the team's leads are saved), and
  * sending and reading your Gmail. The access token lasts about an hour; asking again is quick and
  * usually silent, and when Google needs you to click, the app shows a "Continue" button.
  */
@@ -12,7 +12,7 @@ import { ApiError } from "../errors";
 export const SCOPES = [
   "openid",
   "email",
-  "https://www.googleapis.com/auth/drive.appdata", // a private file only this app can see
+  "https://www.googleapis.com/auth/drive.file", // only the shared workspace file this app creates or you pick
   "https://www.googleapis.com/auth/gmail.send", // send the emails you approve
   "https://www.googleapis.com/auth/gmail.readonly", // spot replies (the app never changes your mail)
 ];
@@ -144,7 +144,7 @@ export class GoogleAuth {
       if (!gis.hasGrantedAllScopes(response, ...SCOPES)) {
         throw new ApiError(
           409,
-          "Corpo Mailer needs every permission it asked for (your email, its private Drive file, and Gmail send and read). Sign in again and leave all the boxes ticked.",
+          "Corpo Mailer needs every permission it asked for (your email, the shared Drive file, and Gmail send and read). Sign in again and leave all the boxes ticked.",
         );
       }
       const email = await this.userEmail(response.access_token);
