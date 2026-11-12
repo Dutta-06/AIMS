@@ -59,6 +59,17 @@ export type Interaction = {
 export type DraftStatus = "draft" | "approved" | "sending" | "sent";
 export type DraftKind = "intro" | "followup" | "thank_you";
 
+export type GmailStatus = {
+  configured: boolean; // the one-time Google setup is done on the backend
+  connected: boolean;
+  needs_reconnect: boolean;
+  email: string | null;
+  connected_at: string | null;
+  last_error: string | null;
+  redirect_uri: string;
+  app_password_user: string | null; // the fallback app-password address, if one is set
+};
+
 export type Revision = { subject: string; body: string; feedback: string; at: string };
 
 export type Draft = {

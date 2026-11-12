@@ -5,6 +5,7 @@ import type {
   Dashboard,
   Draft,
   Enrichment,
+  GmailStatus,
   Prospect,
   ProspectState,
   SearchHit,
@@ -188,6 +189,13 @@ export const api = {
       if (!res.ok) throw new ApiError(res.status, `Export failed (${res.status})`);
       return res.blob();
     },
+  },
+
+  gmail: {
+    status: () => request<GmailStatus>("/gmail/status"),
+    connect: (returnTo: string) =>
+      request<{ url: string }>("/gmail/connect", { method: "POST", ...json({ return_to: returnTo }) }),
+    disconnect: () => request<{ disconnected: boolean }>("/gmail/disconnect", { method: "POST" }),
   },
 
   auth: {

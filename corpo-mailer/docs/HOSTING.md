@@ -46,6 +46,12 @@ There is still one shared password, not per-person accounts.
    deploys automatically; you can also run *Corpo Mailer website (GitHub Pages)* by hand from the
    *Actions* tab. The address is shown in the run, normally `https://<user>.github.io/<repo>/`.
 
+## Gmail
+
+In the app, open **Settings → Connect Gmail** (one-time Google setup:
+[`GMAIL_SETUP.md`](GMAIL_SETUP.md)). No mail password goes in any file. The Google redirect goes to the
+backend on your computer, so it works the same from the Pages site.
+
 ## Every time you use it
 
 1. Start the backend on your computer (`uv run uvicorn app.main:app --host 127.0.0.1 --port 8000`).

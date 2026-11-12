@@ -64,3 +64,9 @@ The site is built as plain static files (`output: "export"`) so it can be hosted
 query string (`/leads/detail?id=3`, `/companies/detail?id=3`), and the CSV export is fetched with the
 sign-in token instead of being a plain link. `NEXT_PUBLIC_BASE_PATH` (the `/<repo>` prefix) and
 `NEXT_PUBLIC_API_URL` are build-time settings.
+
+## Settings: Connect Gmail
+
+`/settings` has **Connect Gmail**: it sends you to Google, brings you back, and shows the connected
+account with **Reconnect** and **Disconnect**. Until the one-time Google setup is done it shows the
+steps (with the redirect address to copy). Setup: [`../docs/GMAIL_SETUP.md`](../docs/GMAIL_SETUP.md).

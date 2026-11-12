@@ -101,6 +101,15 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           >
             ⌘K
           </button>
+          <Link
+            href="/settings"
+            aria-current={pathname.startsWith("/settings") ? "page" : undefined}
+            className={`flex h-full items-center rounded-full px-3 text-[0.82rem] transition-colors hover:bg-glass hover:text-heading ${
+              pathname.startsWith("/settings") ? "bg-glass-strong text-heading" : "text-body"
+            }`}
+          >
+            Settings
+          </Link>
           {signedIn && (
             <button
               type="button"

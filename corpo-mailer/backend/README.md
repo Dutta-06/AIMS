@@ -219,3 +219,22 @@ A draft has a **channel**: `email` (sent from here after approval) or `linkedin`
   (`POST /drafts/{id}/mark-sent`), which logs the outreach and marks the lead Contacted by LinkedIn.
 * **The gate is unchanged**: a note can't be approved or emailed, and an email can't be marked
   sent by hand, so the only way an email goes out is still approve, then Send.
+
+## Connecting Gmail (OAuth)
+
+The easy way to give the app a mailbox. After the one-time Google setup in
+[`../docs/GMAIL_SETUP.md`](../docs/GMAIL_SETUP.md) (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`), a
+signed-in person presses **Connect Gmail** in Settings.
+
+* `GET /gmail/status`, `POST /gmail/connect` (returns Google's consent URL), `GET /gmail/callback`
+  (where Google sends the browser back), `POST /gmail/disconnect` (also revokes at Google).
+* The backend does the token exchange (the client secret never leaves it) with PKCE and a
+  **single-use, 10-minute `state`**. The callback can't carry a sign-in token (Google redirects the
+  browser to it), so that `state` is what protects it; connecting itself needs the sign-in. The
+  browser is only ever sent back to a website listed in `CORS_ORIGINS`.
+* The refresh token is stored in the `gmail_connection` table and never returned by any endpoint.
+* Sending (SMTP) and reading replies (IMAP) are the same code as before, logging in with an OAuth
+  access token (XOAUTH2) instead of a password. Scope: `https://mail.google.com/`, which is what
+  Gmail requires for that. If a refresh fails permanently the connection is marked *needs
+  reconnecting* (the Settings page says so) and mail falls back to the app password if one is set.
+* Approvals are recorded against the connected account.
