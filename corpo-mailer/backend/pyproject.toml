@@ -1,0 +1,39 @@
+[project]
+name = "corpo-mailer-backend"
+version = "0.1.0"
+description = "Sponsorship outreach CRM with human-approved, AI-assisted email."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "pydantic[email]>=2.7",
+    "pydantic-settings>=2.3",
+    "pyjwt>=2.8",
+    "httpx>=0.27",
+    "psycopg[binary]>=3.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["migrations"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test fixtures (CSV sheets, long emails) read better unwrapped.
+"tests/*" = ["E501"]
+# Messages shown to people are kept as single readable strings.
+"app/services/discovery.py" = ["E501"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# FastAPI idiom: Depends() in argument defaults.
+extend-ignore = ["B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

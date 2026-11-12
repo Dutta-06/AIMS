@@ -1,0 +1,11 @@
+.venv
+.env
+.env.*
+!.env.example
+*.db
+__pycache__
+.pytest_cache
+.ruff_cache
+tests
+scripts
+README.md

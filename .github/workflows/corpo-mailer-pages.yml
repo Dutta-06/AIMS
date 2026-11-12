@@ -1,0 +1,62 @@
+# Publishes the Corpo Mailer website (corpo-mailer/frontend) to GitHub Pages.
+#
+# The whole app is plain static files that run in the browser. There is no server and no secret here:
+# leads are kept in the signed-in person's own Google Drive and email goes through their own Gmail.
+# Setup steps are in corpo-mailer/docs/HOSTING.md and corpo-mailer/docs/GMAIL_SETUP.md.
+name: Corpo Mailer website (GitHub Pages)
+
+on:
+  push:
+    branches: [main, corpo-mailer]
+    paths:
+      - "corpo-mailer/frontend/**"
+      - ".github/workflows/corpo-mailer-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: corpo-mailer/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: corpo-mailer/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+        env:
+          # The site is served from https://<user>.github.io/<repo>/
+          NEXT_PUBLIC_BASE_PATH: /${{ github.event.repository.name }}
+          # The Google "client ID" (not a secret). Set it as a repository variable named
+          # GOOGLE_CLIENT_ID; if it is empty, the login page asks for it instead.
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+      - run: touch out/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: corpo-mailer/frontend/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

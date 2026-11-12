@@ -1,0 +1,21 @@
+# Local PostgreSQL for development:  docker compose up -d db
+# Then in backend/.env:  DATABASE_URL=postgresql://corpo:corpo@localhost:5432/corpo_mailer
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: corpo
+      POSTGRES_PASSWORD: corpo
+      POSTGRES_DB: corpo_mailer
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U corpo -d corpo_mailer"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
