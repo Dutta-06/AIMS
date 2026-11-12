@@ -189,6 +189,12 @@ function EventCard({ initial, reload }: { initial: EventSettings; reload: () => 
       <Field label="About the event (dates, venue, audience, what sponsors get)">
         <Textarea rows={5} value={f.event_pitch} onChange={set("event_pitch")} />
       </Field>
+      <Field label="What the assistant is doing and how to sound (sent with every request)">
+        <Textarea rows={5} value={f.team_brief} onChange={set("team_brief")} />
+      </Field>
+      <Field label="Sample messages you like (optional). Your own sent emails are used automatically; replied-to ones first.">
+        <Textarea rows={4} value={f.style_examples} onChange={set("style_examples")} placeholder="Paste an older email or two that worked well. Used for tone and length only." />
+      </Field>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Sender name on emails">
           <Input value={f.from_name} onChange={set("from_name")} />
@@ -205,7 +211,7 @@ function EventCard({ initial, reload }: { initial: EventSettings; reload: () => 
         variant="primary"
         disabled={action.busy}
         onClick={async () => {
-          if (await action.run(() => api.settings.update({ event_name: f.event_name, event_pitch: f.event_pitch, sender_signature: f.sender_signature, from_name: f.from_name, stale_after_days: Number(f.stale) }))) {
+          if (await action.run(() => api.settings.update({ event_name: f.event_name, event_pitch: f.event_pitch, sender_signature: f.sender_signature, team_brief: f.team_brief, style_examples: f.style_examples, from_name: f.from_name, stale_after_days: Number(f.stale) }))) {
             toast("Saved");
             reload();
           }

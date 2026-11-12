@@ -68,10 +68,51 @@ function history(core: Core, contactId: number, limit = 6): string {
     .join("\n");
 }
 
-export function buildPrompt(core: Core, company: Company | undefined, contact: ContactRow, kind: DraftKind, instructions?: string | null): string {
+const EXAMPLES_SHOWN = 3;
+const EXAMPLE_CHARS = 700;
+const MANUAL_EXAMPLE_CHARS = 2500;
+
+/** The team's own sent messages, used as style references. Ones that got a reply come first (they
+ * worked), then the most recent. The archive is simply every draft that was sent; nothing to maintain. */
+export function pastExamples(core: Core, channel: Channel, exceptContactId?: number): { subject: string; body: string; replied: boolean }[] {
+  const sig = core.db.settings.sender_signature;
+  const repliedAfter = (d: DraftRow) =>
+    core.db.interactions.some((i) => i.contact_id === d.contact_id && i.type.includes("reply") && d.sent_at !== null && i.occurred_at >= d.sent_at);
+  return core.db.drafts
+    .filter((d) => d.status === "sent" && d.channel === channel && d.sent_at && d.contact_id !== exceptContactId)
+    .map((d) => ({ d, replied: repliedAfter(d) }))
+    .sort((a, b) => Number(b.replied) - Number(a.replied) || (b.d.sent_at ?? "").localeCompare(a.d.sent_at ?? ""))
+    .slice(0, EXAMPLES_SHOWN)
+    .map(({ d, replied }) => {
+      let body = d.body;
+      if (sig && body.endsWith(`\n\n${sig}`)) body = body.slice(0, -(sig.length + 2));
+      return { subject: d.subject, body: body.slice(0, EXAMPLE_CHARS), replied };
+    });
+}
+
+/** The standing instructions and style references that go with every request. */
+export function standingContext(core: Core, channel: Channel, exceptContactId?: number): string {
+  const s = core.db.settings;
+  const parts: string[] = [];
+  if (s.team_brief.trim()) parts.push(`TEAM BRIEF (what you are doing and how the team wants to sound):\n${s.team_brief.trim().slice(0, 2000)}`);
+  const ex = pastExamples(core, channel, exceptContactId);
+  const manual = s.style_examples.trim().slice(0, MANUAL_EXAMPLE_CHARS);
+  if (ex.length || manual) {
+    const shown = ex.map((e) => `<example${e.replied ? ' got_a_reply="yes"' : ""}>\n${channel === "email" ? `Subject: ${e.subject}\n` : ""}${e.body}\n</example>`);
+    if (manual) shown.push(`<example>\n${manual}\n</example>`);
+    parts.push(
+      "PAST MESSAGES THE TEAM SENT (reference for tone, length and structure only. Do not copy their wording, and never reuse names, companies or facts from them; use only the EVENT and data sections for facts. Those marked got_a_reply worked best):\n" + shown.join("\n"),
+    );
+  }
+  return parts.join("\n\n");
+}
+
+export function buildPrompt(core: Core, company: Company | undefined, contact: ContactRow, kind: DraftKind, instructions?: string | null, channel: Channel = "email"): string {
+  const standing = standingContext(core, channel, contact.id);
   const s = core.db.settings;
   const parts = [
     `TASK: ${KIND_GUIDE[kind]}`,
+    ...(standing ? [standing] : []),
     `EVENT (${s.event_name}):\n${s.event_pitch}`,
     "<data>",
     `Company: ${company?.name ?? "unknown"}`,
@@ -150,7 +191,7 @@ export async function generateDraft(core: Core, llm: LLM, contact: ContactRow, k
   if (contact.do_not_contact) throw new GenerationError("This contact is marked do-not-contact");
   if (channel !== "email" && channel !== "linkedin") throw new GenerationError("Drafts can be written for email or LinkedIn");
   const company = core.db.companies.find((c) => c.id === contact.company_id);
-  const { subject, body } = await ask(llm, channel, buildPrompt(core, company, contact, kind, instructions));
+  const { subject, body } = await ask(llm, channel, buildPrompt(core, company, contact, kind, instructions, channel));
   const draft: DraftRow = {
     id: core.db.seq.draft + 1,
     contact_id: contact.id,
@@ -190,7 +231,9 @@ export async function reviseDraft(core: Core, llm: LLM, draft: DraftRow, feedbac
   const company = core.db.companies.find((c) => c.id === contact.company_id);
   const s = core.db.settings;
   const current = stripSignature(core, draft);
+  const standing = standingContext(core, draft.channel, contact.id);
   const prompt = [
+    ...(standing ? [standing] : []),
     `EVENT (${s.event_name}):\n${s.event_pitch}`,
     "<data>",
     `Company: ${company?.name ?? "unknown"}`,

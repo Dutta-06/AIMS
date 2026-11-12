@@ -88,6 +88,8 @@ export const api = {
         if (b.event_name !== undefined) s.event_name = b.event_name.trim() || s.event_name;
         if (b.event_pitch !== undefined) s.event_pitch = b.event_pitch;
         if (b.sender_signature !== undefined) s.sender_signature = b.sender_signature;
+        if (b.team_brief !== undefined) s.team_brief = b.team_brief;
+        if (b.style_examples !== undefined) s.style_examples = b.style_examples;
         if (b.from_name !== undefined) s.from_name = b.from_name.trim();
         if (b.stale_after_days !== undefined) {
           if (!Number.isInteger(b.stale_after_days) || b.stale_after_days < 1 || b.stale_after_days > 365) throw invalid("Quiet days must be a whole number from 1 to 365");

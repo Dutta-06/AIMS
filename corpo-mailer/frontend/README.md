@@ -42,6 +42,15 @@ lib/api.ts         thin facade the pages call
   your own mail are ignored; bounces mark the lead do-not-contact.
 * Browser settings (`corpo.googleClientId`, `corpo.openrouterKey`, `corpo.models`) live in local storage.
 
+## What the AI is told
+
+Every draft and revision carries a standing **team brief** (Settings: what it is doing and how to
+sound), the event facts, and up to three **past messages** as style references. Past messages come
+from the archive of everything the team has sent (nothing to maintain): emails that got a reply come
+first, then the newest, and a lead's own earlier email is left out (the history already has it). You
+can also paste sample messages in Settings. They guide tone and length only; the AI is told never to
+reuse names or facts from them.
+
 ## Feedback on drafts and LinkedIn notes
 
 Every draft has **Ask for changes**; the AI rewrites it, **Undo** and earlier versions keep your
