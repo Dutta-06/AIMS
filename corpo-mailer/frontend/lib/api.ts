@@ -141,12 +141,16 @@ export const api = {
 
   drafts: {
     list: (p: { status?: DraftStatus; contact_id?: number } = {}) => request<Draft[]>(`/drafts${qs(p)}`),
-    generate: (b: { contact_id: number; kind: DraftKind; instructions?: string }) =>
+    generate: (b: { contact_id: number; kind: DraftKind; instructions?: string; channel?: Channel }) =>
       request<Draft>("/drafts/generate", { method: "POST", ...json(b) }),
     create: (b: { contact_id: number; subject: string; body: string }) =>
       request<Draft>("/drafts", { method: "POST", ...json(b) }),
     edit: (id: number, b: { subject?: string; body?: string }) =>
       request<Draft>(`/drafts/${id}`, { method: "PATCH", ...json(b) }),
+    revise: (id: number, feedback: string) =>
+      request<Draft>(`/drafts/${id}/revise`, { method: "POST", ...json({ feedback }) }),
+    undo: (id: number) => request<Draft>(`/drafts/${id}/undo`, { method: "POST" }),
+    markSent: (id: number) => request<Draft>(`/drafts/${id}/mark-sent`, { method: "POST" }),
     approve: (id: number) => request<Draft>(`/drafts/${id}/approve`, { method: "POST" }),
     revoke: (id: number) => request<Draft>(`/drafts/${id}/revoke`, { method: "POST" }),
     send: (id: number) => request<Draft>(`/drafts/${id}/send`, { method: "POST" }),

@@ -199,3 +199,21 @@ facts and only the query you type leaves your machine. Without a key the endpoin
 to set one up and the rest of discovery works as normal.
 
 Nothing in discovery can send a message.
+
+## Giving feedback on drafts, and LinkedIn notes
+
+A draft has a **channel**: `email` (sent from here after approval) or `linkedin` (a connection note).
+
+* **Feedback** (`POST /drafts/{id}/revise {"feedback": "shorter, mention demo day"}`): the model
+  rewrites the draft from the current text plus the feedback, under the same facts-only rules.
+  The previous version is kept in `history` (the last 20), and `POST /drafts/{id}/undo` goes back
+  one step. A revision **voids any approval**: the new words must be read and approved again.
+  Sent drafts can't be revised, and a revision can only change text; like generating, it has no
+  access to the mailer.
+* **LinkedIn notes** (`POST /drafts/generate` with `"channel": "linkedin"`): short, no subject or
+  signature, held to LinkedIn's 300-character cap (the model is asked again if it overruns, and the
+  note is refused rather than cut mid-sentence). They need no email address. Corpo Mailer **never
+  sends** them: you copy the note into LinkedIn yourself and press "I sent it"
+  (`POST /drafts/{id}/mark-sent`), which logs the outreach and marks the lead Contacted by LinkedIn.
+* **The gate is unchanged**: a note can't be approved or emailed, and an email can't be marked
+  sent by hand, so the only way an email goes out is still approve, then Send.

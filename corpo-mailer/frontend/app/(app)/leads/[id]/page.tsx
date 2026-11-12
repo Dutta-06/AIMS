@@ -183,15 +183,24 @@ function Composer({ lead, onDone }: { lead: Contact; onDone: () => void }) {
   const toast = useToast();
   const [kind, setKind] = useState<DraftKind>(lead.status === "not_contacted" ? "intro" : "followup");
   const [instructions, setInstructions] = useState("");
+  const [channel, setChannel] = useState<"email" | "linkedin">(lead.email ? "email" : "linkedin");
   const { busy, error, run } = useAction();
+  const note = channel === "linkedin";
 
-  if (lead.do_not_contact) return <Empty>Marked do-not-contact, so no emails can be written.</Empty>;
-  if (!lead.email) return <Empty>Add an email address to write an email. (LinkedIn and Discord are done by hand: log it in the thread.)</Empty>;
+  if (lead.do_not_contact) return <Empty>Marked do-not-contact, so no messages can be written.</Empty>;
   return (
     // While the model is writing, the border becomes a slowly rotating ember gradient.
     <div className={`rounded-[1.25rem] p-px transition-colors ${busy ? "ember-spin" : "bg-hairline"}`}>
       <Card className="space-y-3 border-transparent">
-        <p className="text-[0.72rem] font-medium uppercase tracking-[0.08em] text-body/80">Write an email</p>
+        <p className="text-[0.72rem] font-medium uppercase tracking-[0.08em] text-body/80">Write a message</p>
+        <div role="tablist" aria-label="Where it will go" className="inline-flex rounded-full border border-glass-border bg-glass p-1">
+          {([["email", "Email"], ["linkedin", "LinkedIn note"]] as const).map(([v, label]) => (
+            <button key={v} type="button" role="tab" aria-selected={channel === v} disabled={busy} onClick={() => setChannel(v)} className={`h-8 rounded-full px-3.5 text-sm transition-colors ${channel === v ? "bg-glass-strong text-heading" : "text-body hover:text-heading"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        {!note && !lead.email && <p className="text-xs text-body">Add an email address on this lead to write an email.</p>}
         <Field label="Type">
           <Select value={kind} onChange={(e) => setKind(e.target.value as DraftKind)} disabled={busy}>
             <option value="intro">First introduction</option>
@@ -206,9 +215,9 @@ function Composer({ lead, onDone }: { lead: Contact; onDone: () => void }) {
         <Button
           variant="primary"
           className="w-full"
-          disabled={busy}
+          disabled={busy || (!note && !lead.email)}
           onClick={async () => {
-            const ok = await run(() => api.drafts.generate({ contact_id: lead.id, kind, instructions: instructions.trim() || undefined }));
+            const ok = await run(() => api.drafts.generate({ contact_id: lead.id, kind, channel, instructions: instructions.trim() || undefined }));
             if (ok) {
               setInstructions("");
               toast("Draft ready to review");
@@ -216,10 +225,10 @@ function Composer({ lead, onDone }: { lead: Contact; onDone: () => void }) {
             }
           }}
         >
-          {busy ? "Writing…" : "Write a draft with AI"}
+          {busy ? "Writing…" : note ? "Write a LinkedIn note with AI" : "Write a draft with AI"}
         </Button>
         <p aria-live="polite" className="text-xs text-faint">
-          {busy ? "Writing… this can take about 20 seconds." : "It becomes a draft for you to edit. Nothing is sent."}
+          {busy ? "Writing… this can take about 20 seconds." : note ? "A short note (up to 300 characters) for you to edit and paste into LinkedIn yourself. Nothing is sent from here." : "It becomes a draft for you to edit. Nothing is sent."}
         </p>
       </Card>
     </div>
@@ -381,9 +390,9 @@ export default function LeadPage() {
           {lead.reply_unread && <ReplyBanner lead={lead} reply={latestReply} onDone={reload} />}
 
           <section>
-            <SectionTitle>Emails</SectionTitle>
+            <SectionTitle>Messages</SectionTitle>
             {drafts.length === 0 ? (
-              <Empty>No emails yet. Write one from the panel on the right.</Empty>
+              <Empty>No messages yet. Write one from the panel on the right.</Empty>
             ) : (
               <div className="space-y-4">
                 {drafts.map((d) => (

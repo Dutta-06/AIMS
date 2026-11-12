@@ -47,3 +47,12 @@ lib/         api client (adds the X-Corpo-Mailer header), types, hooks, formatti
 ```
 
 `lib/` is un-ignored in `.gitignore` because the repo's root Python `.gitignore` ignores `lib/`.
+
+## Feedback on drafts and LinkedIn notes
+
+Every draft card has **Ask for changes**: describe what to change in plain words (or tap a quick
+option like "Make it shorter") and the AI rewrites it. **Undo last change** and **Show earlier
+versions** keep your wording safe. A revision clears any approval, so you read it and approve again.
+On a lead, "Write a message" has an **Email** or **LinkedIn note** switch. A LinkedIn note is short
+(300 characters, with a counter), has **Copy note** and **I sent it on LinkedIn** buttons, and is
+never sent from here.

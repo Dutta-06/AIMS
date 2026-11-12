@@ -59,9 +59,13 @@ export type Interaction = {
 export type DraftStatus = "draft" | "approved" | "sending" | "sent";
 export type DraftKind = "intro" | "followup" | "thank_you";
 
+export type Revision = { subject: string; body: string; feedback: string; at: string };
+
 export type Draft = {
   id: number;
   contact_id: number;
+  channel: Channel;
+  history: Revision[];
   subject: string;
   body: string;
   status: DraftStatus;
