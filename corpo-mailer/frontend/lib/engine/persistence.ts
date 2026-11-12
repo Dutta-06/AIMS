@@ -30,6 +30,8 @@ export type PersistenceOptions = {
   debounceMs?: number;
   retryMs?: number;
   pollMs?: number;
+  /** How long after a save to check whether a teammate saved at the same moment. */
+  clashCheckMs?: number;
   store?: KeyValueStore;
   now?: () => Date;
 };
@@ -183,6 +185,7 @@ export class Persistence {
       merged = reconcile(this.base, snap, remote, this.nowIso(), this.me());
       this.file = await this.drive.update(this.o.fileId, JSON.stringify(merged));
       this.base = clone(merged);
+      this.checkForClash();
     } catch (e) {
       this.set({ state: "error", error: e instanceof Error ? e.message : "Couldn't save to Google Drive" });
       throw e;
@@ -199,6 +202,25 @@ export class Persistence {
     this.writePending(getDb());
     this.set({ state: "saved", last_saved_at: this.nowIso() });
     return this.saveOnce();
+  }
+
+  /** Right after a save: did a teammate's save land at the very same moment? Drive can't refuse a
+   * write that is based on an older copy, so if the file has moved on from what we just wrote, look
+   * again at once. The merge then puts back anything that one of the two saves left out. */
+  private clashTimer: ReturnType<typeof setTimeout> | null = null;
+  private checkForClash() {
+    const wrote = this.file?.version;
+    if (this.clashTimer) clearTimeout(this.clashTimer);
+    // Wait a moment: the other save may still be on its way when ours finishes.
+    this.clashTimer = setTimeout(() => {
+      this.clashTimer = null;
+      void this.drive
+        .meta(this.o.fileId)
+        .then((m) => {
+          if (m.version !== wrote && this.file?.version === wrote) return this.pull(true);
+        })
+        .catch(() => {});
+    }, this.o.clashCheckMs ?? 1500);
   }
 
   // ------------------------------------------------------------------ teammates' changes
@@ -227,9 +249,16 @@ export class Persistence {
     const merged = reconcile(this.base, cur, remote, this.nowIso(), this.me());
     this.file = meta;
     this.base = clone(remote);
-    if (sameData(merged, cur)) return false;
-    this.o.apply(merged);
-    return true;
+    // The file may be missing something this browser has (a save of ours was overwritten by a
+    // teammate's at the same moment): write it back now, so everyone else gets it too.
+    const fileIsMissingSomething = !sameData(merged, remote);
+    const changedHere = !sameData(merged, cur);
+    if (changedHere) this.o.apply(merged);
+    if (fileIsMissingSomething) {
+      this.set({ dirty: true });
+      await this.flush().catch(() => this.retryLater());
+    }
+    return changedHere;
   }
 
   /** Check for teammates' changes every so often while the page is open. */
@@ -257,6 +286,8 @@ export class Persistence {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.stopPolling();
+    if (this.clashTimer) clearTimeout(this.clashTimer);
+    this.clashTimer = null;
     this.getDb = null;
   }
 }
