@@ -30,7 +30,7 @@ LinkedIn, Discord and/or Personal (multi-select).
 ## Who's using it?
 
 There are no accounts and no names: leads aren't assigned to people. Approvals are recorded against
-the connected Gmail account (Gmail OAuth sign-in is planned and will supply that identity).
+the connected Gmail account (one shared app-password login; there is no per-person sign-in).
 
 ## Sending
 

@@ -54,7 +54,7 @@ There are no accounts or passwords. Instead:
   `POST /drafts/1/send` to `localhost`; the missing header (and the foreign origin) get it refused.
 * There is no "who is logged in" and leads aren't assigned to people. Approving a draft records
   the connected Gmail account (`SMTP_USER`) as the approver; any name sent in the request is ignored.
-  (Gmail OAuth is planned to supply the identity.)
+  (The team uses a Gmail app password, not OAuth sign-in, so there is one shared identity.)
 
 ## The tracker
 
